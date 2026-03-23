@@ -3,22 +3,24 @@
     "name": "healthcare-ai-frontend",
     "slug": "healthcare-ai-frontend",
     "version": "1.0.0",
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "experiments": {
       "tsconfigPaths": true
     },
-
-    "plugins": [],
-
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "운동 자세 분석을 위해 카메라 접근 권한이 필요합니다.",
+          "enableCodeScanner": false
+        }
+      ]
+    ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-
     "userInterfaceStyle": "light",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
