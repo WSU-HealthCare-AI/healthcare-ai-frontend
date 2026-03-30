@@ -1,5 +1,7 @@
+import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
 
 export interface OnboardingHeaderProps {
   currentStep: number;
@@ -13,7 +15,7 @@ export const OnboardingHeader = ({ currentStep, totalSteps }: OnboardingHeaderPr
   return (
     <View className="w-full flex-row items-center justify-between bg-white px-6 py-4">
       <TouchableOpacity onPress={() => router.back()} className="-ml-2 p-2">
-        <Text className="text-xl font-bold text-gray-800">←</Text>
+        <ArrowLeft size={24} color="#111827" />
       </TouchableOpacity>
 
       <View className="relative mx-4 h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
