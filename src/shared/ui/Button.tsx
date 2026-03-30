@@ -1,36 +1,63 @@
-import { TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import React from 'react';
+import { TouchableOpacity, Text, ActivityIndicator, View } from 'react-native';
 
 interface ButtonProps {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   isLoading?: boolean;
+  disabled?: boolean;
+  icon?: React.ReactNode;
 }
 
-export const Button = ({ label, onPress, variant = 'primary', isLoading = false }: ButtonProps) => {
-  const baseClasses = 'w-full py-4 rounded-2xl flex-row justify-center items-center';
-
-  const variantClasses = {
-    primary: 'bg-blue-600',
-    secondary: 'bg-white border border-gray-200',
-    outline: 'bg-white border border-gray-200',
+export const Button = ({
+  label,
+  onPress,
+  variant = 'primary',
+  isLoading = false,
+  disabled = false,
+  icon,
+}: ButtonProps) => {
+  const getVariantStyles = () => {
+    if (disabled) return 'bg-gray-200';
+    switch (variant) {
+      case 'primary':
+        return 'bg-blue-600';
+      case 'secondary':
+        return 'bg-gray-900';
+      case 'outline':
+        return 'bg-transparent border border-gray-200';
+      case 'ghost':
+        return 'bg-transparent';
+      default:
+        return 'bg-blue-600';
+    }
   };
 
-  const textClasses = {
-    primary: 'text-white font-bold text-lg',
-    secondary: 'text-gray-800 font-bold text-lg',
-    outline: 'text-gray-800 font-semibold text-lg',
+  const getTextStyles = () => {
+    if (disabled) return 'text-gray-400';
+    switch (variant) {
+      case 'outline':
+      case 'ghost':
+        return 'text-gray-900';
+      default:
+        return 'text-white';
+    }
   };
 
   return (
     <TouchableOpacity
-      className={`${baseClasses} ${variantClasses[variant]}`}
       onPress={onPress}
-      disabled={isLoading}>
+      disabled={disabled || isLoading}
+      activeOpacity={0.7}
+      className={`h-16 w-full flex-row items-center justify-center rounded-2xl px-4 ${getVariantStyles()}`}>
       {isLoading ? (
-        <ActivityIndicator color={variant === 'primary' ? 'white' : 'black'} />
+        <ActivityIndicator color={variant === 'outline' ? '#111827' : '#FFFFFF'} />
       ) : (
-        <Text className={textClasses[variant]}>{label}</Text>
+        <View className="flex-row items-center">
+          {icon && <View className="mr-2">{icon}</View>}
+          <Text className={`text-lg font-bold ${getTextStyles()}`}>{label}</Text>
+        </View>
       )}
     </TouchableOpacity>
   );

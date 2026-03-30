@@ -1,3 +1,4 @@
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,170 +9,234 @@ import {
   Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
-import { ONBOARDING_DATA } from '@/src/entities/user/model/onboarding';
+import {
+  ONBOARDING_DATA,
+  onboardingSchema,
+  OnboardingFormValues,
+} from '@/src/entities/user/model/onboarding';
 import { Chip } from '@/src/shared/ui/Chip';
 import { Button } from '@/src/shared/ui/Button';
 import { OnboardingHeader } from '@/src/widgets/header/ui/OnboardingHeader';
+import { useRegistrationStore } from '@/src/entities/user/model/store';
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
-  const [gender, setGender] = useState<string>('');
-  const [height, setHeight] = useState<string>('');
-  const [weight, setWeight] = useState<string>('');
-  const [purposes, setPurposes] = useState<string[]>([]);
-  const [painPoints, setPainPoints] = useState<string[]>([]);
-  const [diseases, setDiseases] = useState<string[]>([]);
-  const [surgeryHistory, setSurgeryHistory] = useState<string>('');
+  // Zustand 전역 스토어 연결
+  const { account, setProfile } = useRegistrationStore();
 
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  // 가입 경로(이메일/구글)에 따른 스텝 수 계산
+  const isGoogle = account.authProvider === 'google';
+  const currentStep = isGoogle ? 1 : 2;
+  const totalSteps = isGoogle ? 3 : 4;
 
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<OnboardingFormValues>({
+    resolver: zodResolver(onboardingSchema),
+    defaultValues: {
+      gender: '',
+      height: '',
+      weight: '',
+      purposes: [],
+      painPoints: ['없음'],
+      diseases: ['없음'],
+      surgeryHistory: '',
+    },
+    mode: 'onChange',
+  });
+
+  const formValues = watch();
+
+  // 네이티브 키보드 대응 및 안드로이드 제스처 뒤로가기 포커스 해제
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () =>
-      setIsKeyboardVisible(true)
-    );
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
       setIsKeyboardVisible(false);
       Keyboard.dismiss();
     });
-
     return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
-  const toggleSelection = (
-    item: string,
-    currentList: string[],
-    setList: (list: string[]) => void
-  ) => {
-    if (item === '없음') {
-      setList(['없음']);
+  const handleToggleArray = (field: keyof OnboardingFormValues, value: string) => {
+    const currentArray = (formValues[field] as string[]) || [];
+
+    // '없음'을 누른 경우 다른 모든 선택을 지우고 '없음'만 남김
+    if (value === '없음') {
+      setValue(field, ['없음'] as any, { shouldValidate: true });
       return;
     }
-    let newList = currentList.filter((i) => i !== '없음');
-    if (newList.includes(item)) {
-      setList(newList.filter((i) => i !== item));
-    } else {
-      setList([...newList, item]);
-    }
+
+    // '없음'이 아닌 다른 항목을 누른 경우
+    const filtered = currentArray.filter((i) => i !== '없음');
+    const nextArray = filtered.includes(value)
+      ? filtered.filter((i) => i !== value)
+      : [...filtered, value];
+
+    // 만약 모든 선택을 해제했다면 자동으로 '없음' 선택
+    const finalArray = nextArray.length === 0 ? ['없음'] : nextArray;
+
+    setValue(field, finalArray as any, { shouldValidate: true });
+  };
+
+  const onNext = (data: OnboardingFormValues) => {
+    // Zustand 스토어에 데이터 반영
+    setProfile(data);
+    // 다음 단계(인바디 등록)로 이동
+    router.push('/onboarding/inbody');
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <OnboardingHeader currentStep={1} totalSteps={3} />
+      <OnboardingHeader currentStep={currentStep} totalSteps={totalSteps} />
 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1">
         <ScrollView
           ref={scrollViewRef}
           className="flex-1 px-6 pt-4"
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: isKeyboardVisible ? 250 : 40 }}>
+          contentContainerStyle={{ paddingBottom: isKeyboardVisible ? 280 : 40 }}>
           <Text className="mb-8 text-2xl font-bold leading-tight text-gray-900">
-            정확한 맞춤 추천을 위해{'\n'}몇 가지 정보가 필요해요.
+            정확한 추천을 위해{'\n'}신체 정보를 알려주세요.
           </Text>
 
+          {/* 성별 선택 섹션 */}
           <View className="mb-8">
             <Text className="mb-3 text-sm font-bold text-gray-700">성별</Text>
-            <View className="mb-4 flex-row flex-wrap">
-              {ONBOARDING_DATA.GENDERS.map((g: string) => (
-                <Chip key={g} label={g} isSelected={gender === g} onPress={() => setGender(g)} />
+            <View className="flex-row flex-wrap">
+              {ONBOARDING_DATA.GENDERS.map((g) => (
+                <Chip
+                  key={g}
+                  label={g}
+                  isSelected={formValues.gender === g}
+                  onPress={() => setValue('gender', g, { shouldValidate: true })}
+                />
               ))}
             </View>
+            {errors.gender && (
+              <Text className="mt-1 text-xs text-red-500">{errors.gender.message}</Text>
+            )}
+          </View>
 
-            <View className="flex-row space-x-4">
-              <View className="mr-2 flex-1">
-                <Text className="mb-2 text-sm font-bold text-gray-700">키 (cm)</Text>
-                <TextInput
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-base"
-                  placeholder="170"
-                  keyboardType="numeric"
-                  value={height}
-                  onChangeText={setHeight}
-                />
-              </View>
-              <View className="ml-2 flex-1">
-                <Text className="mb-2 text-sm font-bold text-gray-700">몸무게 (kg)</Text>
-                <TextInput
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-base"
-                  placeholder="70"
-                  keyboardType="numeric"
-                  value={weight}
-                  onChangeText={setWeight}
-                />
-              </View>
+          {/* 키와 몸무게 입력 섹션 */}
+          <View className="mb-8 flex-row space-x-4">
+            <View className="mr-2 flex-1">
+              <Text className="mb-2 text-sm font-bold text-gray-700">키 (cm)</Text>
+              <Controller
+                control={control}
+                name="height"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    className={`w-full rounded-xl border bg-gray-50 p-4 text-base text-gray-900 ${errors.height ? 'border-red-500' : 'border-gray-100'}`}
+                    placeholder="170"
+                    keyboardType="numeric"
+                    value={value}
+                    onChangeText={onChange}
+                  />
+                )}
+              />
+            </View>
+            <View className="ml-2 flex-1">
+              <Text className="mb-2 text-sm font-bold text-gray-700">몸무게 (kg)</Text>
+              <Controller
+                control={control}
+                name="weight"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    className={`w-full rounded-xl border bg-gray-50 p-4 text-base text-gray-900 ${errors.weight ? 'border-red-500' : 'border-gray-100'}`}
+                    placeholder="70"
+                    keyboardType="numeric"
+                    value={value}
+                    onChangeText={onChange}
+                  />
+                )}
+              />
             </View>
           </View>
 
+          {/* 운동 목적 선택 */}
           <View className="mb-8">
-            <Text className="mb-3 text-sm font-bold text-gray-700">운동 목적 (중복 선택 가능)</Text>
+            <Text className="mb-3 text-sm font-bold text-gray-700">운동 목적 (중복 가능)</Text>
             <View className="flex-row flex-wrap">
-              {ONBOARDING_DATA.PURPOSES.map((p: string) => (
+              {ONBOARDING_DATA.PURPOSES.map((p) => (
                 <Chip
                   key={p}
                   label={p}
-                  isSelected={purposes.includes(p)}
-                  onPress={() => toggleSelection(p, purposes, setPurposes)}
+                  isSelected={formValues.purposes.includes(p)}
+                  onPress={() => handleToggleArray('purposes', p)}
                 />
               ))}
             </View>
           </View>
 
+          {/* 통증 부위 선택  */}
           <View className="mb-8">
-            <Text className="mb-3 text-sm font-bold text-gray-700">
-              현재 통증 부위 (중복 선택 가능)
-            </Text>
+            <Text className="mb-3 text-sm font-bold text-gray-700">통증 부위 (중복 가능)</Text>
             <View className="flex-row flex-wrap">
-              {ONBOARDING_DATA.PAIN_POINTS.map((p: string) => (
+              {ONBOARDING_DATA.PAIN_POINTS.map((p) => (
                 <Chip
                   key={p}
                   label={p}
-                  isSelected={painPoints.includes(p)}
-                  onPress={() => toggleSelection(p, painPoints, setPainPoints)}
+                  isSelected={formValues.painPoints.includes(p)}
+                  onPress={() => handleToggleArray('painPoints', p)}
                 />
               ))}
             </View>
           </View>
 
+          {/* 기저 질환 선택  */}
           <View className="mb-8">
-            <Text className="mb-3 text-sm font-bold text-gray-700">기저 질환 (중복 선택 가능)</Text>
+            <Text className="mb-3 text-sm font-bold text-gray-700">기저 질환 (중복 가능)</Text>
             <View className="flex-row flex-wrap">
-              {ONBOARDING_DATA.DISEASES.map((d: string) => (
+              {ONBOARDING_DATA.DISEASES.map((d) => (
                 <Chip
                   key={d}
                   label={d}
-                  isSelected={diseases.includes(d)}
-                  onPress={() => toggleSelection(d, diseases, setDiseases)}
+                  isSelected={formValues.diseases.includes(d)}
+                  onPress={() => handleToggleArray('diseases', d)}
                 />
               ))}
             </View>
           </View>
 
+          {/* 과거 수술 이력 및 추가 정보 */}
           <View className="mb-8">
             <Text className="mb-3 text-sm font-bold text-gray-700">
               과거 수술 이력 및 복용 약물
             </Text>
-            <TextInput
-              className="h-24 w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-base text-gray-800"
-              placeholder="예: 3년 전 허리 디스크 수술, 혈압약 복용 중"
-              multiline
-              textAlignVertical="top"
-              value={surgeryHistory}
-              onChangeText={setSurgeryHistory}
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: false });
-                }, 200);
-              }}
+            <Controller
+              control={control}
+              name="surgeryHistory"
+              render={({ field: { onChange, value } }) => (
+                <TextInput
+                  className="h-24 w-full rounded-xl border border-gray-100 bg-gray-50 p-4 text-base text-gray-900"
+                  placeholder="예: 3년 전 허리 디스크 수술 등"
+                  multiline
+                  textAlignVertical="top"
+                  value={value}
+                  onChangeText={onChange}
+                  onFocus={() => {
+                    // 키보드에 가려지지 않게 스크롤 끝까지 이동
+                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
+                  }}
+                />
+              )}
             />
           </View>
         </ScrollView>
@@ -179,12 +244,9 @@ export default function OnboardingScreen() {
         <View className="border-t border-gray-100 bg-white px-6 py-4">
           <Button
             label="다음으로"
-            variant="primary"
-            onPress={() => {
-              Keyboard.dismiss();
-              console.log('다음 단계로 이동 완료');
-              // router.push('/onboarding/step2');
-            }}
+            variant={isValid ? 'primary' : 'secondary'}
+            onPress={handleSubmit(onNext)}
+            disabled={!isValid}
           />
         </View>
       </KeyboardAvoidingView>
