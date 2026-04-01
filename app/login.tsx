@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
 import { Button } from '@/src/shared/ui/Button';
+import { useRegistrationStore } from '@/src/entities/user/model/store';
+import { supabase } from '@/src/shared/api/supabase';
 
 // 로그인 유효성 검사 스키마 정의
 const loginSchema = z.object({
@@ -27,6 +30,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const router = useRouter();
+  const setAccount = useRegistrationStore((state) => state.setAccount);
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     control,
@@ -41,9 +46,54 @@ export default function LoginScreen() {
     mode: 'onChange',
   });
 
-  const onSubmit = (data: LoginFormValues) => {
-    console.log('Login Data:', data);
-    router.replace('/(main)');
+  // 온보딩 여부 체크 및 라우팅 함수
+  const checkOnboardingAndRedirect = async (
+    userId: string,
+    userEmail: string,
+    provider: 'email' | 'google'
+  ) => {
+    try {
+      const { data, error } = await supabase
+        .from('health_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setAccount({ email: userEmail, authProvider: provider });
+
+      if (data) {
+        router.replace('/(main)');
+      } else {
+        router.replace('/onboarding');
+      }
+    } catch (error: any) {
+      Alert.alert('데이터 조회 오류', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onSubmit = async (data: LoginFormValues) => {
+    setIsLoading(true);
+
+    // Supabase Auth 로그인 호출
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (error) {
+      Alert.alert('로그인 실패', error.message);
+      setIsLoading(false);
+      return;
+    }
+
+    // 로그인 성공 시 온보딩 검사 및 라우팅
+    if (authData.user) {
+      await checkOnboardingAndRedirect(authData.user.id, authData.user.email || '', 'email');
+    }
   };
 
   return (
@@ -85,6 +135,7 @@ export default function LoginScreen() {
                       onBlur={onBlur}
                       onChangeText={onChange}
                       value={value}
+                      editable={!isLoading}
                     />
                   </View>
                 )}
@@ -111,6 +162,7 @@ export default function LoginScreen() {
                       onBlur={onBlur}
                       onChangeText={onChange}
                       value={value}
+                      editable={!isLoading}
                     />
                   </View>
                 )}
@@ -121,16 +173,17 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <TouchableOpacity className="mt-4 self-end">
+          <TouchableOpacity className="mt-4 self-end" disabled={isLoading}>
             <Text className="font-medium text-blue-600">비밀번호를 잊으셨나요?</Text>
           </TouchableOpacity>
 
           <View className="mb-8 mt-auto">
             <Button
-              label="로그인"
+              label={isLoading ? '로그인 중...' : '로그인'}
               variant={isValid ? 'primary' : 'secondary'}
               onPress={handleSubmit(onSubmit)}
-              disabled={!isValid}
+              disabled={!isValid || isLoading}
+              isLoading={isLoading}
             />
           </View>
         </ScrollView>

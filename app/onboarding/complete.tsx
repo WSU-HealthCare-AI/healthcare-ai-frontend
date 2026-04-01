@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -16,10 +16,11 @@ import {
 import { Button } from '@/src/shared/ui/Button';
 import { OnboardingHeader } from '@/src/widgets/header/ui/OnboardingHeader';
 import { useRegistrationStore } from '@/src/entities/user/model/store';
+import { supabase } from '@/src/shared/api/supabase';
 
 export default function OnboardingCompleteScreen() {
   const router = useRouter();
-  const { account, profile } = useRegistrationStore();
+  const { account, profile, reset } = useRegistrationStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isGoogle = account.authProvider === 'google';
@@ -31,23 +32,72 @@ export default function OnboardingCompleteScreen() {
 
     setIsSubmitting(true);
 
-    // 실제 환경에서는 여기서 Supabase Auth 및 Database API를 호출
-    const finalData = {
-      auth: account,
-      user_profile: profile,
-      created_at: new Date().toISOString(),
-    };
+    try {
+      // 현재 가입/로그인된 세션 유저 가져오기
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    console.log('--- 최종 가입 데이터 서버 전송 ---');
-    console.log(JSON.stringify(finalData, null, 2));
+      if (!user) {
+        throw new Error('유저 인증 정보가 없습니다. 다시 로그인해주세요.');
+      }
 
-    // API 지연 시뮬레이션 (1.5초)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Zustand에 모인 profile 데이터를 DB 스키마에 맞게 매핑
+      const healthProfileData = {
+        user_id: user.id, // Auth 테이블의 고유 ID 연결
+        name: profile.name,
+        birth_date: profile.birthDate,
+        gender: profile.gender,
+        height: profile.height ? parseFloat(profile.height) : null,
+        weight: profile.weight ? parseFloat(profile.weight) : null,
+        purposes: profile.purposes || [],
+        pain_points: profile.painPoints || [],
+        diseases: profile.diseases || [],
+        allergies: profile.allergies || null,
+        surgery_history: profile.surgeryHistory || null,
+        muscle_mass: profile.muscleMass ? parseFloat(profile.muscleMass) : null,
+        fat_percentage: profile.fatPercentage ? parseFloat(profile.fatPercentage) : null,
+        bmi: profile.bmi ? parseFloat(profile.bmi) : null,
+      };
 
-    setIsSubmitting(false);
+      // Supabase Database Insert 호출
+      const { error: insertError } = await supabase
+        .from('health_profiles')
+        .insert([healthProfileData]);
 
-    // 가입 완료 후 메인 대시보드로 이동
-    router.replace('/(main)');
+      if (insertError) {
+        throw insertError;
+      }
+
+      // 성공 시 스토어 초기화 및 메인 화면으로 이동
+      reset();
+      router.replace('/(main)');
+    } catch (error: any) {
+      console.error('Profile Insert Error:', error);
+      Alert.alert('오류 발생', error.message || '데이터를 저장하는 도중 문제가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const calculateAge = (birthDate?: string) => {
+    if (!birthDate || birthDate.length !== 8) return '';
+
+    const year = parseInt(birthDate.substring(0, 4), 10);
+    const month = parseInt(birthDate.substring(4, 6), 10) - 1;
+    const day = parseInt(birthDate.substring(6, 8), 10);
+
+    const today = new Date();
+    const birth = new Date(year, month, day);
+
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+
+    return age;
   };
 
   return (
@@ -65,7 +115,7 @@ export default function OnboardingCompleteScreen() {
           </View>
           <Text className="text-center text-3xl font-bold leading-tight text-gray-900">
             준비 완료!{'\n'}
-            {account.email ? account.email.split('@')[0] : '회원'}님 반가워요
+            {profile.name}님 반가워요
           </Text>
           <Text className="mt-2 text-center text-base text-gray-500">
             AI가 분석한 맞춤형 플랜이 생성되었습니다.
@@ -79,6 +129,9 @@ export default function OnboardingCompleteScreen() {
             icon={<User size={18} color="#4B5563" />}
             title="기본 정보"
             onPress={() => router.push('/onboarding')}>
+            <Text className="mb-1 text-sm font-medium text-gray-600">
+              {profile.name} (만 {calculateAge(profile.birthDate)}세)
+            </Text>
             <Text className="text-gray-600">
               {profile.gender || '미설정'} · {profile.height || '--'}cm · {profile.weight || '--'}kg
             </Text>
@@ -120,6 +173,10 @@ export default function OnboardingCompleteScreen() {
                 {profile.diseases && profile.diseases.length > 0
                   ? profile.diseases.join(', ')
                   : '없음'}
+              </Text>
+              <Text className="mt-1 text-sm text-gray-600" numberOfLines={1}>
+                <Text className="font-bold text-gray-600">알러지: </Text>
+                {profile.allergies || '없음'}
               </Text>
             </View>
           </SummaryCard>
