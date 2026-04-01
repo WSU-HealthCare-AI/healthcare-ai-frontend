@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -102,24 +102,6 @@ export default function RootLayout() {
     router,
   ]);
 
-  const handleDevReset = async () => {
-    Alert.alert('세션 초기화', '정말 로그아웃하고 초기 상태로 돌아가시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '초기화',
-        style: 'destructive',
-        onPress: async () => {
-          setIsReady(false);
-          await supabase.auth.signOut();
-          clearAuth();
-          reset();
-          setIsReady(true);
-          router.replace('/welcome');
-        },
-      },
-    ]);
-  };
-
   return (
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>
@@ -132,7 +114,6 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
       </Stack>
 
-      {/* 💡 화면 덮어씌우기(Overlay) 방식의 로딩 스피너: 깜빡임과 언매치 라우트를 완벽 차단! */}
       {(!isReady || isProfileLoading || isAuthProcessing) && (
         <View
           style={{
@@ -141,7 +122,7 @@ export default function RootLayout() {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: '#ffffff', // 뒷배경 깜빡임을 숨기기 위해 불투명한 흰색 사용
+            backgroundColor: '#ffffff',
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 9999,
@@ -151,28 +132,6 @@ export default function RootLayout() {
             {isAuthProcessing ? '처리 중...' : '데이터 동기화 중...'}
           </Text>
         </View>
-      )}
-
-      {__DEV__ && (
-        <TouchableOpacity
-          onPress={handleDevReset}
-          style={{
-            position: 'absolute',
-            bottom: 40,
-            right: 20,
-            backgroundColor: 'rgba(239, 68, 68, 0.9)',
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: 20,
-            elevation: 5,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            zIndex: 9999,
-          }}>
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>DEV: 세션 초기화</Text>
-        </TouchableOpacity>
       )}
     </SafeAreaProvider>
   );
