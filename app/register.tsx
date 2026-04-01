@@ -1,5 +1,13 @@
-import React from 'react';
-import { View, Text, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
@@ -10,11 +18,9 @@ import * as z from 'zod';
 import { Button } from '@/src/shared/ui/Button';
 import { OnboardingHeader } from '@/src/widgets/header/ui/OnboardingHeader';
 import { useRegistrationStore } from '@/src/entities/user/model/store';
+import { supabase } from '@/src/shared/api/supabase';
 
-/**
- * 회원가입 스키마 (Zod)
- * 가입하기 버튼 클릭 시 온보딩의 첫 단계로 작동합니다.
- */
+// 회원가입 유효성 검사 스키마 정의
 const registerSchema = z
   .object({
     email: z.string().email('올바른 이메일 형식을 입력해주세요.'),
@@ -31,6 +37,7 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function RegisterScreen() {
   const router = useRouter();
   const setAccount = useRegistrationStore((state) => state.setAccount);
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     control,
@@ -47,14 +54,29 @@ export default function RegisterScreen() {
   });
 
   // 다음 단계(온보딩 질문)로 이동
-  const onNext = (data: RegisterFormValues) => {
-    // Zustand 스토어에 계정 정보 임시 저장
-    setAccount({
+  const onNext = async (data: RegisterFormValues) => {
+    setIsLoading(true);
+
+    // Supabase Auth 회원가입 호출
+    const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      Alert.alert('회원가입 실패', error.message);
+      return;
+    }
+
+    // Zustand 스토어에 계정 정보 저장
+    setAccount({
+      email: data.email,
       authProvider: 'email',
     });
-    // 실제 가입 처리는 온보딩이 모두 끝난 후 수행됨
+
+    // 온보딩으로 이동
     router.push('/onboarding');
   };
 
@@ -162,6 +184,7 @@ export default function RegisterScreen() {
               variant={isValid ? 'primary' : 'secondary'}
               onPress={handleSubmit(onNext)}
               disabled={!isValid}
+              isLoading={isLoading}
             />
           </View>
         </ScrollView>

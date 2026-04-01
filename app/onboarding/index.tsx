@@ -45,12 +45,15 @@ export default function OnboardingScreen() {
   } = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
+      name: '',
+      birthDate: '',
       gender: '',
       height: '',
       weight: '',
       purposes: [],
       painPoints: ['없음'],
       diseases: ['없음'],
+      allergies: '',
       surgeryHistory: '',
     },
     mode: 'onChange',
@@ -113,8 +116,50 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: isKeyboardVisible ? 280 : 40 }}>
           <Text className="mb-8 text-2xl font-bold leading-tight text-gray-900">
-            정확한 추천을 위해{'\n'}신체 정보를 알려주세요.
+            정확한 추천을 위해{'\n'}기본 정보를 알려주세요.
           </Text>
+
+          {/* 이름 입력 */}
+          <View className="mb-6">
+            <Text className="mb-2 ml-1 text-sm font-bold text-gray-700">이름</Text>
+            <Controller
+              control={control}
+              name="name"
+              render={({ field: { onChange, value } }) => (
+                <TextInput
+                  className={`w-full rounded-xl border bg-gray-50 p-4 text-base text-gray-900 ${errors.name ? 'border-red-500' : 'border-gray-100'}`}
+                  placeholder="별명으로 사용될 이름을 입력해주세요"
+                  value={value}
+                  onChangeText={onChange}
+                />
+              )}
+            />
+            {errors.name && (
+              <Text className="ml-1 mt-1 text-xs text-red-500">{errors.name.message}</Text>
+            )}
+          </View>
+
+          {/* 생년월일 입력 */}
+          <View className="mb-8">
+            <Text className="mb-2 ml-1 text-sm font-bold text-gray-700">생년월일 (8자리)</Text>
+            <Controller
+              control={control}
+              name="birthDate"
+              render={({ field: { onChange, value } }) => (
+                <TextInput
+                  className={`w-full rounded-xl border bg-gray-50 p-4 text-base text-gray-900 ${errors.birthDate ? 'border-red-500' : 'border-gray-100'}`}
+                  placeholder="예: 19900101"
+                  keyboardType="numeric"
+                  maxLength={8}
+                  value={value}
+                  onChangeText={onChange}
+                />
+              )}
+            />
+            {errors.birthDate && (
+              <Text className="ml-1 mt-1 text-xs text-red-500">{errors.birthDate.message}</Text>
+            )}
+          </View>
 
           {/* 성별 선택 섹션 */}
           <View className="mb-8">
@@ -213,6 +258,26 @@ export default function OnboardingScreen() {
                 />
               ))}
             </View>
+          </View>
+
+          {/* 알러지 정보 입력 */}
+          <View className="mb-8">
+            <Text className="mb-3 text-sm font-bold text-gray-700">알러지 정보 (식단 추천용)</Text>
+            <Controller
+              control={control}
+              name="allergies"
+              render={({ field: { onChange, value } }) => (
+                <TextInput
+                  className="w-full rounded-xl border border-gray-100 bg-gray-50 p-4 text-base text-gray-900"
+                  placeholder="예: 땅콩, 갑각류, 복숭아 등 (없으면 비워두세요)"
+                  value={value}
+                  onChangeText={onChange}
+                  onFocus={() =>
+                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150)
+                  }
+                />
+              )}
+            />
           </View>
 
           {/* 과거 수술 이력 및 추가 정보 */}

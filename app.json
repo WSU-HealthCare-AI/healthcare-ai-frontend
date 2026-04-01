@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "healthcare-ai-frontend",
-    "slug": "healthcare-ai-frontend",
-    "scheme": "healthcare-ai",
+    "name": "fitmate,-ai",
+    "slug": "fitmate-ai",
+    "scheme": "fitmate-ai",
     "version": "1.0.0",
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/app-logo.png"
     },
     "experiments": {
       "tsconfigPaths": true
@@ -18,10 +18,11 @@
           "enableCodeScanner": false
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-web-browser"
     ],
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-logo.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
