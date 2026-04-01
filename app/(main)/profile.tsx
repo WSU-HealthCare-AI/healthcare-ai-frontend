@@ -52,7 +52,7 @@ export default function ProfileScreen() {
           }
         }
       } catch (error) {
-        console.error('[Profile] Session sync failed:', error);
+        console.error('Session sync failed:', error);
       }
     };
 
@@ -70,7 +70,7 @@ export default function ProfileScreen() {
       // 로그아웃 시 웰컴스크린으로 직접 이동
       router.replace('/welcome');
     } catch (error: any) {
-      console.error('[ERROR] Sign out failed:', error);
+      console.error('Sign out failed:', error);
       Alert.alert('로그아웃 오류', '로그아웃 도중 문제가 발생했습니다.');
     }
   };

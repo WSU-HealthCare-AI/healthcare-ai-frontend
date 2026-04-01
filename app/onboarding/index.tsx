@@ -22,6 +22,7 @@ import { Chip } from '@/src/shared/ui/Chip';
 import { Button } from '@/src/shared/ui/Button';
 import { OnboardingHeader } from '@/src/widgets/header/ui/OnboardingHeader';
 import { useRegistrationStore } from '@/src/entities/user/model/store';
+import { useAuthStore } from '@/src/entities/user/model/authStore';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -29,10 +30,11 @@ export default function OnboardingScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // Zustand 전역 스토어 연결
-  const { account, setProfile } = useRegistrationStore();
+  const { setProfile } = useRegistrationStore();
+  const { session } = useAuthStore();
 
   // 가입 경로(이메일/구글)에 따른 스텝 수 계산
-  const isGoogle = account.authProvider === 'google';
+  const isGoogle = session?.user?.app_metadata?.provider === 'google';
   const currentStep = isGoogle ? 1 : 2;
   const totalSteps = isGoogle ? 3 : 4;
 
