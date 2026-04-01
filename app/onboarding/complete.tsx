@@ -18,9 +18,12 @@ import { OnboardingHeader } from '@/src/widgets/header/ui/OnboardingHeader';
 import { useRegistrationStore } from '@/src/entities/user/model/store';
 import { supabase } from '@/src/shared/api/supabase';
 
+import { useAuthStore } from '@/src/entities/user/model/authStore';
+
 export default function OnboardingCompleteScreen() {
   const router = useRouter();
   const { account, profile, reset } = useRegistrationStore();
+  const { checkAndFetchProfile } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isGoogle = account.authProvider === 'google';
@@ -33,48 +36,48 @@ export default function OnboardingCompleteScreen() {
     setIsSubmitting(true);
 
     try {
-      // 현재 가입/로그인된 세션 유저 가져오기
+      // 현재 로그인된 유저 세션 가져오기
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
-        throw new Error('유저 인증 정보가 없습니다. 다시 로그인해주세요.');
-      }
+      if (userError || !user)
+        throw new Error('유저 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
 
-      // Zustand에 모인 profile 데이터를 DB 스키마에 맞게 매핑
-      const healthProfileData = {
-        user_id: user.id, // Auth 테이블의 고유 ID 연결
+      // BMI 계산 로직
+      const heightInM = Number(profile.height) / 100;
+      const calculatedBmi = Number(profile.weight) / (heightInM * heightInM);
+
+      // DB(health_profiles)에 온보딩 데이터 Insert
+      const { error: insertError } = await supabase.from('health_profiles').insert({
+        user_id: user.id,
         name: profile.name,
-        birth_date: profile.birthDate,
         gender: profile.gender,
-        height: profile.height ? parseFloat(profile.height) : null,
-        weight: profile.weight ? parseFloat(profile.weight) : null,
+        birth_date: profile.birthDate,
+        height: Number(profile.height),
+        weight: Number(profile.weight),
+        bmi: Number(calculatedBmi.toFixed(1)),
         purposes: profile.purposes || [],
-        pain_points: profile.painPoints || [],
         diseases: profile.diseases || [],
         allergies: profile.allergies || null,
         surgery_history: profile.surgeryHistory || null,
-        muscle_mass: profile.muscleMass ? parseFloat(profile.muscleMass) : null,
-        fat_percentage: profile.fatPercentage ? parseFloat(profile.fatPercentage) : null,
-        bmi: profile.bmi ? parseFloat(profile.bmi) : null,
-      };
-
-      // Supabase Database Insert 호출
-      const { error: insertError } = await supabase
-        .from('health_profiles')
-        .insert([healthProfileData]);
+        pain_points: profile.painPoints || [],
+      });
 
       if (insertError) {
-        throw insertError;
+        console.error('Insert Error:', insertError);
+        throw new Error('프로필 저장 중 문제가 발생했습니다.');
       }
 
-      // 성공 시 스토어 초기화 및 메인 화면으로 이동
+      await checkAndFetchProfile(user.id);
+
+      // 임시 폼 스토어 비우기 및 메인으로 이동
       reset();
       router.replace('/(main)');
     } catch (error: any) {
-      console.error('Profile Insert Error:', error);
-      Alert.alert('오류 발생', error.message || '데이터를 저장하는 도중 문제가 발생했습니다.');
+      console.error('온보딩 완료 처리 실패:', error);
+      Alert.alert('저장 실패', error.message || '데이터베이스 저장 중 문제가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -118,7 +121,7 @@ export default function OnboardingCompleteScreen() {
             {profile.name}님 반가워요
           </Text>
           <Text className="mt-2 text-center text-base text-gray-500">
-            AI가 분석한 맞춤형 플랜이 생성되었습니다.
+            AI가 분석한 맞춤형 플랜을 경험하세요!
           </Text>
         </View>
 
@@ -209,11 +212,11 @@ export default function OnboardingCompleteScreen() {
         <View className="mb-6 mt-10 rounded-2xl border border-gray-100 bg-gray-50 p-5">
           <View className="mb-2 flex-row items-center">
             <CheckCircle2 size={16} color="#10B981" />
-            <Text className="ml-2 font-bold text-gray-900">AI 맞춤 분석 완료</Text>
+            <Text className="ml-2 font-bold text-gray-900">AI 맞춤 분석 준비</Text>
           </View>
           <Text className="text-sm leading-relaxed text-gray-500">
             입력하신 정보를 바탕으로 {profile.purposes?.[0] || '건강 관리'}를 위한 최적화된 운동
-            루틴과 식단 가이드를 준비했습니다.
+            루틴과 식단 가이드를 준비할게요!
           </Text>
         </View>
 
