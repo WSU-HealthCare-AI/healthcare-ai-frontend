@@ -13,14 +13,13 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.wsu.fitmate",
       "infoPlist": {
-        "NSCameraUsageDescription": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다."
+        "NSCameraUsageDescription": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다.",
+        "NSLocationWhenInUseUsageDescription": "앱 사용 중 일부 iOS 기능 및 연동 라이브러리 지원을 위해 위치 접근 권한이 필요할 수 있습니다."
       }
     },
     "android": {
@@ -29,9 +28,7 @@
         "foregroundImage": "./assets/app-logo.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "android.permission.CAMERA"
-      ]
+      "permissions": ["android.permission.CAMERA"]
     },
     "web": {
       "favicon": "./assets/app-logo.png"
