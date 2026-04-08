@@ -3,12 +3,16 @@ import { View, ActivityIndicator, Text } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
+import * as SplashScreen from 'expo-splash-screen';
 import { supabase } from '@/src/shared/api/supabase';
 import { useRegistrationStore } from '@/src/entities/user/model/store';
 import { useAuthStore } from '@/src/entities/user/model/authStore';
-import '../global.css';
+import '@/global.css';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// 앱이 처음 켜질 때 네이티브 스플래시 화면이 멋대로 사라지는 것을 강제로 막음
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const router = useRouter();
@@ -21,6 +25,9 @@ export default function RootLayout() {
 
   const [isReady, setIsReady] = useState(false);
   const [isAuthProcessing, setIsAuthProcessing] = useState(false);
+
+  // 하얀색 오버레이 렌더링을 제어할 상태
+  const [showOverlay, setShowOverlay] = useState(true);
 
   const isBootingRef = useRef(true);
 
@@ -36,7 +43,7 @@ export default function RootLayout() {
           await checkAndFetchProfile(initialSession.user.id);
         }
       } catch (err) {
-        console.error('초기 세션 로드 실패:', err);
+        console.error('[RootLayout] 초기 세션 로드 실패:', err);
       } finally {
         isBootingRef.current = false;
         setIsReady(true);
@@ -57,7 +64,7 @@ export default function RootLayout() {
           try {
             await checkAndFetchProfile(currentSession.user.id);
           } catch (e) {
-            console.error('프로필 조회 에러:', e);
+            console.error('[RootLayout] 프로필 조회 에러:', e);
           } finally {
             setIsAuthProcessing(false);
           }
@@ -75,21 +82,56 @@ export default function RootLayout() {
     };
   }, [setSession, checkAndFetchProfile, reset, clearAuth]);
 
+  // 현재 유저가 '올바른 화면'에 도착했는지 확인하는 논리
+  const currentSegment = segments[0];
+  const inAuthGroup =
+    currentSegment === 'welcome' || currentSegment === 'login' || currentSegment === 'register';
+  const inOnboardingGroup = currentSegment === 'onboarding';
+  const inMainGroup = currentSegment === '(main)';
+
+  const isCorrectScreen =
+    (!session && inAuthGroup) ||
+    (session && !profile && inOnboardingGroup) ||
+    (session && profile && inMainGroup);
+
+  const isFullyReady =
+    isReady &&
+    !isProfileLoading &&
+    !isAuthProcessing &&
+    isCorrectScreen &&
+    rootNavigationState?.key;
+
+  // 라우팅 결정 및 오버레이 제거 로직
   useEffect(() => {
     if (!isReady || isProfileLoading || isAuthProcessing || !rootNavigationState?.key) return;
 
-    const currentSegment = segments[0];
-    const inAuthGroup =
-      currentSegment === 'welcome' || currentSegment === 'login' || currentSegment === 'register';
-    const inOnboardingGroup = currentSegment === 'onboarding';
-    const inMainGroup = currentSegment === '(main)';
-
     if (!session) {
-      if (!inAuthGroup) router.replace('/welcome');
+      if (!inAuthGroup) {
+        router.replace('/welcome');
+        return;
+      }
     } else if (session && !profile) {
-      if (!inOnboardingGroup) router.replace('/onboarding');
+      if (!inOnboardingGroup) {
+        router.replace('/onboarding');
+        return;
+      }
     } else if (session && profile) {
-      if (!inMainGroup) router.replace('/(main)');
+      if (!inMainGroup) {
+        router.replace('/(main)');
+        return;
+      }
+    }
+
+    // 올바른 경로에 도착했다면, 전환 애니메이션이 끝날 때까지 300ms 대기 후 오버레이를 치움
+    if (isFullyReady) {
+      const timer = setTimeout(() => {
+        setShowOverlay(false);
+        SplashScreen.hideAsync().catch(() => {});
+      }, 300);
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowOverlay(true);
     }
   }, [
     session,
@@ -99,12 +141,16 @@ export default function RootLayout() {
     isProfileLoading,
     isAuthProcessing,
     rootNavigationState?.key,
+    isFullyReady,
     router,
+    inAuthGroup,
+    inMainGroup,
+    inOnboardingGroup,
   ]);
 
   return (
     <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
         <Stack.Screen name="(main)" />
         <Stack.Screen name="onboarding/index" />
         <Stack.Screen name="onboarding/inbody" />
@@ -114,22 +160,12 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
       </Stack>
 
-      {(!isReady || isProfileLoading || isAuthProcessing) && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: '#ffffff',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 9999,
-          }}>
+      {/* 로딩 오버레이 */}
+      {showOverlay && (
+        <View className="absolute inset-0 z-[9999] items-center justify-center bg-white">
           <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={{ marginTop: 16, color: '#6b7280', fontWeight: '500' }}>
-            {isAuthProcessing ? '처리 중...' : '데이터 동기화 중...'}
+          <Text className="mt-4 font-medium text-gray-500">
+            {isAuthProcessing ? '로그인 처리 중...' : '동기화 중...'}
           </Text>
         </View>
       )}
