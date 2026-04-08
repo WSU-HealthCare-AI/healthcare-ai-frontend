@@ -2,9 +2,12 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, Play, Clock, Zap, ChevronRightIcon } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 // 운동 탭
 export default function WorkoutScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="px-6 py-4">
@@ -14,7 +17,10 @@ export default function WorkoutScreen() {
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
         {/* 메인 AI 운동 카드 */}
-        <TouchableOpacity className="mt-4 w-full rounded-3xl bg-blue-600 p-6 shadow-lg shadow-blue-100">
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => router.push('/(main)/camera')}
+          className="mt-4 w-full rounded-3xl bg-blue-600 p-6 shadow-lg shadow-blue-100">
           <View className="mb-10 flex-row items-center justify-between">
             <View className="rounded-full bg-white/20 px-3 py-1">
               <Text className="text-xs font-bold text-white">AI 감지 모드</Text>
@@ -23,14 +29,11 @@ export default function WorkoutScreen() {
           </View>
 
           <Text className="mb-2 text-3xl font-bold text-white">실시간 스쿼트</Text>
-          <Text className="text-base leading-relaxed text-blue-100">
-            무릎 각도와 허리 숙임을{'\n'}AI가 실시간으로 분석합니다.
-          </Text>
 
-          <View className="mt-8 flex-row items-center">
-            <View className="mr-4 flex-row items-center">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center">
               <Clock size={16} color="white" opacity={0.7} />
-              <Text className="opacity-0.9 ml-1 text-sm text-white">15분</Text>
+              <Text className="opacity-0.9 ml-1 mr-4 text-sm text-white">15분</Text>
             </View>
             <View className="flex-row items-center">
               <Zap size={16} color="white" opacity={0.7} />
@@ -63,15 +66,15 @@ const WorkoutItem = ({
   difficulty: string;
 }) => (
   <TouchableOpacity className="mb-4 flex-row items-center rounded-2xl border border-gray-100 bg-gray-50 p-4">
-    <View className="h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm">
-      <Play size={20} color="#4B5563" />
+    <View className="mr-4 h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+      <Zap size={20} color="#3b82f6" />
     </View>
-    <View className="ml-4 flex-1">
-      <Text className="text-base font-bold text-gray-900">{title}</Text>
-      <Text className="mt-1 text-xs text-gray-400">
+    <View className="flex-1">
+      <Text className="font-bold text-gray-900">{title}</Text>
+      <Text className="text-sm text-gray-500">
         {duration} · {difficulty}
       </Text>
     </View>
-    <ChevronRightIcon size={18} color="#D1D5DB" />
+    <ChevronRightIcon size={20} color="#cbd5e1" />
   </TouchableOpacity>
 );

@@ -1,43 +1,75 @@
 {
   "expo": {
-    "name": "fitmate-ai",
-    "slug": "fitmate-ai",
-    "scheme": "fitmate-ai",
+    "name": "FitMate AI",
+    "slug": "wsu-fitmate",
+    "owner": "wsu-fitmate",
+    "scheme": "wsu-fitmate",
     "version": "1.0.0",
-    "web": {
-      "favicon": "./assets/app-logo.png"
-    },
-    "experiments": {
-      "tsconfigPaths": true
-    },
-    "plugins": [
-      [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "운동 자세 분석을 위해 카메라 접근 권한이 필요합니다.",
-          "enableCodeScanner": false
-        }
-      ],
-      "expo-router",
-      "expo-web-browser"
-    ],
     "orientation": "portrait",
     "icon": "./assets/app-logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/app-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wsu.fitmate",
+      "infoPlist": {
+        "NSCameraUsageDescription": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다."
+      }
     },
     "android": {
+      "package": "com.wsu.fitmate",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app-logo.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/app-logo.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다.",
+          "enableCodeScanner": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "kotlinVersion": "2.1.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "react-native-fast-tflite"
+    ],
+    "experiments": {
+      "tsconfigPaths": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "92a560c3-aaab-4526-9006-e887cd3769a3"
+      },
+      "router": {}
     }
   }
 }
