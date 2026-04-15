@@ -11,6 +11,7 @@ import {
   PartyPopper,
   Stethoscope,
   ClipboardList,
+  CalendarDays,
 } from 'lucide-react-native';
 
 import { Button } from '@/src/shared/ui/Button';
@@ -59,6 +60,7 @@ export default function OnboardingCompleteScreen() {
         weight: Number(profile.weight),
         bmi: Number(calculatedBmi.toFixed(1)),
         purposes: profile.purposes || [],
+        exercise_frequency: profile.exerciseFrequency || null,
         diseases: profile.diseases || [],
         allergies: profile.allergies || null,
         surgery_history: profile.surgeryHistory || null,
@@ -157,6 +159,16 @@ export default function OnboardingCompleteScreen() {
                 <Text className="italic text-gray-400">미선택</Text>
               )}
             </View>
+          </SummaryCard>
+
+          {/* 운동 주기 요약 */}
+          <SummaryCard
+            icon={<CalendarDays size={18} color="#4B5563" />}
+            title="운동 주기"
+            onPress={() => router.push('/onboarding')}>
+            <Text className="text-sm font-medium text-gray-600">
+              {profile.exerciseFrequency || '미선택'}
+            </Text>
           </SummaryCard>
 
           {/* 통증 및 질환 요약 */}

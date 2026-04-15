@@ -11,77 +11,93 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.framework.image.MediaImageBuilder
+import org.json.JSONArray
 
-// VisionCamera 프레임을 받아 MediaPipe로 포즈를 추론해 JS로 반환하는 FrameProcessor 플러그인
+// VisionCamera 프레임을 받아 MediaPipe로 포즈 추론 후 JSON 문자열로 반환하는 플러그인
 class PoseLandmarkerPlugin(private val context: Context, proxy: VisionCameraProxy, options: Map<String, Any>?) : FrameProcessorPlugin() {
     
     private var poseLandmarker: PoseLandmarker? = null
 
     init {
-        Log.d("PoseLandmarkerPlugin", "MediaPipe Pose Landmarker 초기화 시작...") // 초기화 시작 로그
+        Log.d("FitMate_AI", "MediaPipe Pose Landmarker 초기화 시작...") // 초기화 시작 로그
+        val modelPath = "pose_landmarker_full.task" // 사용할 모델 파일 경로
+        val landmarkerOptionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
+            .setRunningMode(RunningMode.VIDEO) // 비디오(연속 프레임) 모드 설정
+            .setNumPoses(1) // 최대 인식 인원 수
+            .setMinPoseDetectionConfidence(0.3f) // 감도 완화
+            .setMinPosePresenceConfidence(0.35f)
+            .setMinTrackingConfidence(0.5f)       
+            
         try {
-            // 모델 경로와 Delegate 설정 (GPU 사용)
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetPath("pose_landmarker_lite.task") // assets 내 .task 모델 파일 경로
-                .setDelegate(Delegate.GPU)
+            val baseOptionsGPU = BaseOptions.builder()
+                .setModelAssetPath(modelPath) // 모델을 assets에서 로드
+                .setDelegate(Delegate.GPU) // GPU delegate 우선 시도
                 .build()
-
-            // PoseLandmarker 옵션 설정 (비디오 모드, 신뢰도 등)
-            val landmarkerOptions = PoseLandmarker.PoseLandmarkerOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setRunningMode(RunningMode.VIDEO) // 연속 프레임용 비디오 모드
-                .setNumPoses(1) // 최대 1명 추적
-                .setMinPoseDetectionConfidence(0.3f) // 감도 완화(얼굴 가려짐 허용)
-                .setMinPosePresenceConfidence(0.3f)
-                .setMinTrackingConfidence(0.5f) // 트래킹 신뢰도는 보수적으로 유지
-                .build()
-
-            poseLandmarker = PoseLandmarker.createFromOptions(context, landmarkerOptions) // 엔진 생성
-            Log.d("PoseLandmarkerPlugin", "✅ MediaPipe 엔진 탑재 완료") 
+            
+            // GPU 옵션으로 엔진 생성 시도
+            poseLandmarker = PoseLandmarker.createFromOptions(context, landmarkerOptionsBuilder.setBaseOptions(baseOptionsGPU).build()) 
+            Log.d("FitMate_AI", "✅ MediaPipe 엔진 탑재 완료 (GPU 모드)") // GPU 성공 로그
         } catch (e: Exception) {
-            Log.e("PoseLandmarkerPlugin", "❌ MediaPipe 초기화 실패: ${e.message}") 
+            Log.w("FitMate_AI", "⚠️ GPU 초기화 실패. CPU 모드로 Fallback 재시도합니다: ${e.message}") // GPU 실패 시 경고
+            try {
+                val baseOptionsCPU = BaseOptions.builder()
+                    .setModelAssetPath(modelPath)
+                    .setDelegate(Delegate.CPU) // CPU delegate로 대체
+                    .build()
+                
+                // CPU 옵션으로 재시도
+                poseLandmarker = PoseLandmarker.createFromOptions(context, landmarkerOptionsBuilder.setBaseOptions(baseOptionsCPU).build()) 
+                Log.d("FitMate_AI", "✅ MediaPipe 엔진 탑재 완료 (CPU Fallback 모드)") // CPU 성공 로그
+            } catch (e2: Exception) {
+                Log.e("FitMate_AI", "❌ CPU 모드마저 초기화 실패: ${e2.message}") // 최종 실패 로그
+            }
         }
     }
 
     override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
         try {
-            val landmarker = poseLandmarker ?: return null // 엔진 미초기화 시 중단
-            val image = frame.image ?: return null // 이미지 없으면 중단
+            val landmarker = poseLandmarker ?: run {
+                Log.e("FitMate_AI", "⚠️ 엔진 미초기화로 추론 건너뜀")
+                return null // 엔진 미초기화 시 중단
+            }
+            val image = frame.image ?: run {
+                Log.e("FitMate_AI", "⚠️ 프레임 이미지가 비어있음")
+                return null // 이미지 없으면 중단
+            }
 
             val mpImage = MediaImageBuilder(image).build() // MediaPipe 입력 이미지 생성
             val timestampMs = frame.timestamp / 1_000_000 // 나노초 -> 밀리초 변환
 
+            val rotation = (arguments?.get("rotation") as? Double)?.toInt() ?: 270 // 호출 인자에서 회전값 사용(기본 270)
+
             val imageProcessingOptions = ImageProcessingOptions.builder()
-                .setRotationDegrees(270) // 카메라 회전 보정
+                .setRotationDegrees(rotation) // 회전 보정 적용
                 .build()
 
             val result = landmarker.detectForVideo(mpImage, imageProcessingOptions, timestampMs) // 비디오 프레임 추론
             val landmarks = result.landmarks() // 추출된 랜드마크 목록
             
             if (landmarks.isNullOrEmpty()) {
-                return null // 랜드마크 없으면 null 반환
+                return null // 랜드마크가 없으면 null 반환
             }
 
             val firstPerson = landmarks[0] // 첫 번째 사람(주 피사체) 선택
-            // 각 랜드마크를 JS로 전달하기 쉬운 Map 구조로 변환
-            val landmarkList = firstPerson.map {
-                mapOf(
-                    "x" to it.x().toDouble(),
-                    "y" to it.y().toDouble(),
-                    "z" to it.z().toDouble(),
-                    "visibility" to it.visibility().orElse(1.0f).toDouble(),
-                    "presence" to it.presence().orElse(1.0f).toDouble()
-                )
+
+            // 결과를 JSON 배열로 변환: [[x,y,z,visibility,presence], ...]
+            val rootArray = JSONArray()
+            firstPerson.forEach {
+                val pointArray = JSONArray()
+                pointArray.put(it.x().toDouble())
+                pointArray.put(it.y().toDouble())
+                pointArray.put(it.z().toDouble())
+                pointArray.put(it.visibility().orElse(1.0f).toDouble())
+                pointArray.put(it.presence().orElse(1.0f).toDouble())
+                rootArray.put(pointArray)
             }
 
-            // 랜드마크와 프레임 크기를 반환(프론트엔드에서 사용)
-            return mapOf(
-                "landmarks" to landmarkList,
-                "frameWidth" to frame.width.toDouble(),
-                "frameHeight" to frame.height.toDouble()
-            )
+            return rootArray.toString() // JS 쪽에서 파싱할 수 있는 문자열 반환
         } catch (e: Exception) {
-            Log.e("PoseLandmarkerPlugin", "⚠️ 추론 에러: ${e.message}")
+            Log.e("FitMate_AI", "⚠️ 런타임 추론 에러: ${e.message}") // 예외 로깅
             return null // 오류 시 안전하게 null 반환
         }
     }

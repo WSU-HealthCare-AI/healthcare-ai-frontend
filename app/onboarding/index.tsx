@@ -232,6 +232,27 @@ export default function OnboardingScreen() {
             </View>
           </View>
 
+          {/* 운동 주기 선택 */}
+          <View className="mb-8">
+            <Text className="mb-3 text-sm font-bold text-gray-700">현재 운동 주기</Text>
+            <Controller
+              control={control}
+              name="exerciseFrequency"
+              render={({ field: { onChange, value } }) => (
+                <View className="flex-row flex-wrap gap-2">
+                  {ONBOARDING_DATA.EXERCISE_FREQUENCIES.map((freq) => (
+                    <Chip
+                      key={freq}
+                      label={freq}
+                      isSelected={value === freq}
+                      onPress={() => onChange(freq)} // 단일 선택
+                    />
+                  ))}
+                </View>
+              )}
+            />
+          </View>
+
           {/* 통증 부위 선택  */}
           <View className="mb-8">
             <Text className="mb-3 text-sm font-bold text-gray-700">통증 부위 (중복 가능)</Text>
