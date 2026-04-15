@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Bell, Flame, Trophy, Dumbbell, Utensils, Calendar } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 import { useRegistrationStore } from '@/src/entities/user/model/store';
 import { supabase } from '@/src/shared/api/supabase';
@@ -12,6 +13,8 @@ export default function DashboardScreen() {
   const { profile, setProfile } = useRegistrationStore();
   const [userName, setUserName] = useState(profile.name ? `${profile.name}님` : '');
   const [loading, setLoading] = useState(false);
+
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -98,7 +101,9 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <TouchableOpacity className="items-center rounded-2xl bg-white py-3 active:opacity-90">
+          <TouchableOpacity
+            className="items-center rounded-2xl bg-white py-3 active:opacity-90"
+            onPress={() => router.push('/workout')}>
             <Text className="font-bold text-blue-600">운동 시작하기</Text>
           </TouchableOpacity>
         </View>

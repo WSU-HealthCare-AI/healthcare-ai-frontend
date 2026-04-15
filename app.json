@@ -57,7 +57,7 @@
           }
         }
       ],
-      "react-native-fast-tflite"
+      "./plugins/withMediaPipeVision.cjs"
     ],
     "experiments": {
       "tsconfigPaths": true
