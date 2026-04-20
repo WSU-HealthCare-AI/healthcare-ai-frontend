@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/src/shared/api/supabase';
+import type { InbodyRecord } from '../../inbody/model/types';
 
 export interface UserProfile {
   idx: number;
@@ -16,8 +17,6 @@ export interface UserProfile {
   allergies: string | null;
   surgery_history: string | null;
   pain_points: string[];
-  muscle_mass: number | null;
-  fat_percentage: number | null;
   birth_date: string;
   created_at: string;
   updated_at: string;
@@ -26,16 +25,18 @@ export interface UserProfile {
 interface AuthState {
   session: Session | null;
   profile: UserProfile | null;
+  latestInbody: InbodyRecord | null;
   isProfileLoading: boolean;
 
   setSession: (session: Session | null) => void;
   checkAndFetchProfile: (userId: string) => Promise<void>;
+  fetchLatestInbody: (userId: string) => Promise<void>;
   clearAuth: () => void;
 }
-
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   profile: null,
+  latestInbody: null,
   isProfileLoading: false,
 
   setSession: (session) => set({ session }),
@@ -43,7 +44,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAndFetchProfile: async (userId) => {
     set({ isProfileLoading: true });
     try {
-      // maybeSingle()을 사용하여 데이터가 없을 때 에러를 던지지 않고 null을 반환
       const { data, error } = await supabase
         .from('health_profiles')
         .select('*')
@@ -55,12 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
 
-      if (data) {
-        set({ profile: data });
-      } else {
-        // data가 null인 경우
-        set({ profile: null });
-      }
+      set({ profile: data ?? null });
     } catch (err) {
       console.error('프로필 조회 실패:', err);
       set({ profile: null });
@@ -69,5 +64,28 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  clearAuth: () => set({ session: null, profile: null }),
+  fetchLatestInbody: async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('inbody_records')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('인바디 조회 실패:', error);
+        set({ latestInbody: null });
+        return;
+      }
+
+      set({ latestInbody: data ?? null });
+    } catch (err) {
+      console.error('인바디 조회 실패:', err);
+      set({ latestInbody: null });
+    }
+  },
+
+  clearAuth: () => set({ session: null, profile: null, latestInbody: null }),
 }));
