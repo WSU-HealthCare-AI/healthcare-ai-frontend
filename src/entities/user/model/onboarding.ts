@@ -27,11 +27,6 @@ export const onboardingSchema = z.object({
   diseases: z.array(z.string()).min(1, '질환 여부를 선택해주세요.'),
   allergies: z.string().optional(),
   surgeryHistory: z.string().optional(),
-
-  //  인바디 정보
-  muscleMass: z.string().optional(),
-  fatPercentage: z.string().optional(),
-  bmi: z.string().optional(),
 });
 
 export type OnboardingFormValues = z.infer<typeof onboardingSchema>;
