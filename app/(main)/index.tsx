@@ -1,56 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bell, Flame, Trophy, Dumbbell, Utensils, Calendar } from 'lucide-react-native';
+import { Bell, Trophy, AlertTriangle, RefreshCw, Info, Activity } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
-import { useRegistrationStore } from '@/src/entities/user/model/store';
-import { supabase } from '@/src/shared/api/supabase';
+import { useCurrentUserProfile } from '@/src/entities/user/api/useCurrentUserProfile';
+import { useRecommendationPlan } from '@/src/features/recommendation/api/useRecommendationPlan';
+import { DietGuideWidget } from '@/src/widgets/recommendation/ui/DietGuideWidget';
+import { WorkoutPlanWidget } from '@/src/widgets/recommendation/ui/WorkoutPlanWidget';
+import { RoutineListWidget } from '@/src/widgets/recommendation/ui/RoutineListWidget';
 
-// 대시 보드
 export default function DashboardScreen() {
-  const { profile, setProfile } = useRegistrationStore();
-  const [userName, setUserName] = useState(profile.name ? `${profile.name}님` : '');
-  const [loading, setLoading] = useState(false);
-
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (profile.name) return;
+  // 유저 정보 훅 호출
+  const { userId, userName, userLoading } = useCurrentUserProfile();
 
-      try {
-        setLoading(true);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (user) {
-          const { data, error } = await supabase
-            .from('health_profiles')
-            .select('name')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (error) throw error;
-          if (data?.name) {
-            setUserName(`${data.name}님`);
-            setProfile({ name: data.name });
-          }
-        }
-      } catch (err) {
-        console.error('프로필 불러오기 실패:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProfile();
-  }, [profile.name, setProfile]);
+  // AI 훅 호출
+  const { plan, status, error, retry } = useRecommendationPlan(userId);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <StatusBar style="dark" />
 
       {/* 상단 헤더 */}
@@ -60,11 +31,14 @@ export default function DashboardScreen() {
             <Text className="text-sm font-medium text-gray-400">오늘도 힘차게 시작해볼까요?</Text>
             <View className="flex-row items-center">
               <Text className="text-2xl font-bold text-gray-900">{userName}</Text>
-              {loading && <ActivityIndicator size="small" color="#2563EB" className="ml-2" />}
             </View>
           </View>
         </View>
-        <TouchableOpacity className="rounded-full bg-gray-50 p-2 active:opacity-60">
+        <TouchableOpacity
+          className="rounded-full bg-gray-50 p-2 active:opacity-60"
+          accessibilityRole="button"
+          accessibilityLabel="알림 확인하기"
+          accessibilityHint="새로운 알림이 있는지 확인합니다.">
           <Bell size={24} color="#111827" />
         </TouchableOpacity>
       </View>
@@ -73,91 +47,150 @@ export default function DashboardScreen() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-        {/* 오늘의 운동 플랜 */}
-        <View className="mt-6 rounded-3xl bg-blue-600 p-6 shadow-lg shadow-blue-200">
-          <View className="mb-4 flex-row items-center">
-            <Calendar size={17} color="white" />
-            <Text className="ml-2 px-1 text-base font-bold text-white">오늘의 운동 플랜</Text>
+        {/* ==================== 1. 플랜 데이터가 아예 없을 때 ==================== */}
+
+        {!plan && (status === 'idle' || status === 'syncing' || userLoading) && (
+          <View
+            className="mt-6 items-center justify-center rounded-3xl border border-gray-100 bg-gray-50 py-12"
+            accessible={true}
+            accessibilityLabel="데이터를 동기화 중입니다">
+            <ActivityIndicator size="large" color="#9CA3AF" className="mb-4" />
+            <Text className="text-base font-bold text-gray-500">데이터를 확인하고 있습니다...</Text>
           </View>
+        )}
 
-          <View className="mb-4 rounded-2xl bg-white/10 p-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                <Dumbbell size={20} color="white" />
-                <Text className="ml-3 text-lg font-bold text-white">전신 근력 강화 루틴</Text>
-              </View>
-              <Text className="text-sm font-medium text-blue-100">약 45분</Text>
-            </View>
-            <View className="mt-3 flex-row space-x-2">
-              <View className="rounded-full bg-white/20 px-3 py-1">
-                <Text className="text-xs text-white">스쿼트</Text>
-              </View>
-              <View className="rounded-full bg-white/20 px-3 py-1">
-                <Text className="text-xs text-white">푸쉬업</Text>
-              </View>
-              <View className="rounded-full bg-white/20 px-3 py-1">
-                <Text className="text-xs text-white">플랭크</Text>
-              </View>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            className="items-center rounded-2xl bg-white py-3 active:opacity-90"
-            onPress={() => router.push('/workout')}>
-            <Text className="font-bold text-blue-600">운동 시작하기</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 오늘의 식단 */}
-        <View className="mt-4 rounded-3xl bg-gray-900 p-6">
-          <View className="mb-4 flex-row items-center">
-            <Utensils size={17} color="#93C5FD" />
-            <Text className="ml-2 px-1 text-base font-bold text-blue-300">오늘의 식단</Text>
-          </View>
-
-          <View className="space-y-3">
-            <MealItem label="아침" desc="닭가슴살 샐러드 & 통밀빵" />
-            <MealItem label="점심" desc="현미밥 & 고등어구이 & 나물" />
-            <MealItem label="저녁" desc="두부 소고기 볶음 & 채소" />
-          </View>
-
-          <View className="mt-4 flex-row justify-between border-t border-white/10 pt-4">
-            <Text className="text-xs text-gray-400">일일 권장 칼로리</Text>
-            <Text className="text-xs font-bold text-white">1,850 kcal</Text>
-          </View>
-        </View>
-
-        {/* 활동 지표 요약 */}
-        <View className="mt-8 flex-row gap-x-4">
-          <View className="flex-1 rounded-3xl border border-gray-100 bg-gray-50 p-5">
-            <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-red-100">
-              <Flame size={20} color="#EF4444" />
-            </View>
-            <Text className="mb-1 text-xs font-medium text-gray-400">소모 칼로리</Text>
-            <Text className="text-xl font-bold text-gray-900">
-              420 <Text className="text-xs">kcal</Text>
+        {!plan && status === 'generating' && (
+          <View
+            className="mt-6 items-center justify-center rounded-3xl border border-blue-100 bg-blue-50 py-12"
+            accessible={true}
+            accessibilityLabel="AI가 맞춤 플랜을 생성 중입니다. 최대 10초가 소요됩니다.">
+            <ActivityIndicator size="large" color="#2563EB" className="mb-4" />
+            <Text className="text-base font-bold text-blue-900">
+              AI가 맞춤 플랜을 생성 중입니다
+            </Text>
+            <Text className="mt-2 px-6 text-center text-sm text-blue-700">
+              회원님의 인바디 데이터와 건강 기록을 분석하여{'\n'}최적의 플랜을 짜고 있어요. (최대
+              10초 소요)
             </Text>
           </View>
-          <View className="flex-1 rounded-3xl border border-gray-100 bg-gray-50 p-5">
-            <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-yellow-100">
-              <Trophy size={20} color="#F59E0B" />
-            </View>
-            <Text className="mb-1 text-xs font-medium text-gray-400">연속 운동일</Text>
-            <Text className="text-xl font-bold text-gray-900">
-              5 <Text className="text-xs">일째</Text>
+        )}
+
+        {!plan && status === 'error' && (
+          <View className="mt-6 items-center justify-center rounded-3xl border border-red-100 bg-red-50 p-6">
+            <AlertTriangle size={36} color="#EF4444" className="mb-3" />
+            <Text className="mb-1 text-lg font-bold text-red-900">플랜 생성 문제 발생</Text>
+            <Text className="mb-5 text-center text-sm leading-5 text-red-700">
+              {error || '알 수 없는 문제가 발생했습니다.'}
             </Text>
+            <TouchableOpacity
+              onPress={retry}
+              accessibilityRole="button"
+              accessibilityLabel="플랜 다시 생성하기"
+              accessibilityHint="네트워크를 통해 데이터를 다시 불러옵니다."
+              className="flex-row items-center justify-center rounded-xl bg-red-600 px-6 py-3 shadow-sm"
+              activeOpacity={0.8}>
+              <RefreshCw size={18} color="white" className="mr-2" />
+              <Text className="font-bold text-white">다시 시도하기</Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
+
+        {/* ==================== 2. 플랜 데이터가 있을 때 ==================== */}
+
+        {plan && (
+          <View className="pb-12">
+            {status === 'error' && (
+              <View className="mb-4 flex-row items-center justify-between rounded-2xl border border-red-100 bg-red-50 p-4">
+                <View className="flex-1 flex-row items-center pr-2">
+                  <AlertTriangle size={18} color="#EF4444" className="mr-2 flex-shrink-0" />
+                  <Text className="text-sm font-bold leading-5 text-red-900">
+                    최신화 실패. 이전 플랜을 표시합니다.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={retry}
+                  className="rounded-lg bg-red-100 px-4 py-2 active:opacity-70"
+                  accessibilityRole="button"
+                  accessibilityLabel="다시 시도">
+                  <Text className="text-xs font-bold text-red-700">재시도</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {(status === 'syncing' || status === 'generating') && (
+              <View className="mb-4 flex-row items-center rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <ActivityIndicator size="small" color="#2563EB" className="mr-3" />
+                <Text className="text-sm font-bold text-blue-900">
+                  건강 데이터 변경을 감지하여 갱신 중입니다...
+                </Text>
+              </View>
+            )}
+
+            {/* AI 요약 경고문 */}
+            {plan.risk_flags && plan.risk_flags.length > 0 && (
+              <View className="mt-2 flex-row items-start rounded-2xl border border-red-100 bg-red-50 p-4">
+                <AlertTriangle size={18} color="#EF4444" className="mr-2 mt-0.5 flex-shrink-0" />
+                <View className="flex-1">
+                  <Text className="mb-2 text-sm font-bold text-red-800">AI 맞춤 주의사항</Text>
+                  {plan.risk_flags.map((flag, idx) => (
+                    <Text
+                      key={`flag-${flag.substring(0, 5)}-${idx}`}
+                      className="mb-1 text-xs leading-5 text-red-600">
+                      • {flag}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* 운동 플랜 위젯 */}
+            <WorkoutPlanWidget
+              workoutPlan={plan.workout_plan}
+              onStartWorkout={() => router.push('/workout')}
+            />
+
+            {/* 식단 가이드 위젯 */}
+            <DietGuideWidget
+              calorieGuide={plan.calorie_guide}
+              macroGuide={plan.macro_guide}
+              onRefresh={retry}
+            />
+
+            {/* 활동 지표 요약 */}
+            <View className="mb-4 mt-4 flex-row gap-x-4">
+              <View className="flex-1 rounded-3xl border border-gray-100 bg-gray-50 p-5">
+                <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <Activity size={20} color="#3B82F6" />
+                </View>
+                <Text className="mb-1 text-xs font-medium text-gray-400">주간 운동 목표</Text>
+                <Text className="text-xl font-bold text-gray-900">
+                  {plan.workout_plan.weekly_frequency} <Text className="text-xs">회/주</Text>
+                </Text>
+              </View>
+              <View className="flex-1 rounded-3xl border border-gray-100 bg-gray-50 p-5">
+                <View className="mb-3 h-10 w-10 items-center justify-center rounded-full bg-yellow-100">
+                  <Trophy size={20} color="#F59E0B" />
+                </View>
+                <Text className="mb-1 text-xs font-medium text-gray-400">권장 운동 강도</Text>
+                <Text className="text-xl font-bold text-gray-900">
+                  Level {plan.workout_plan.intensity}
+                </Text>
+              </View>
+            </View>
+
+            {/* 세부 루틴 리스트 위젯 */}
+            <RoutineListWidget exercises={plan.workout_plan.exercises} />
+
+            {/* 면책 조항 */}
+            <View className="mb-4 mt-6 flex-row items-start rounded-2xl bg-gray-100 p-4">
+              <Info size={16} color="#9CA3AF" className="mr-2 mt-0.5 flex-shrink-0" />
+              <Text className="flex-1 text-xs leading-5 text-gray-500">
+                {plan.medical_disclaimer}
+              </Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const MealItem = ({ label, desc }: { label: string; desc: string }) => (
-  <View className="flex-row items-center justify-between py-1">
-    <Text className="w-12 text-sm font-bold text-blue-300">{label}</Text>
-    <Text className="ml-2 flex-1 text-sm text-white" numberOfLines={1}>
-      {desc}
-    </Text>
-  </View>
-);
