@@ -1,169 +1,91 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/src/shared/api/supabase";
 import {
-  FunctionsFetchError,
-  FunctionsHttpError,
-  FunctionsRelayError,
-} from "@supabase/supabase-js";
+  AIPlanPayload,
+  AIPlanPayloadSchema,
+} from "@/src/entities/recommendation/model/schema";
 
-// AI가 응답하는 JSON 구조에 맞춘 타입 정의
-export interface AIRecommendationPlan {
-  medical_disclaimer: string;
-  risk_flags: string[];
-  summary: string;
-  calorie_guide: number;
-  macro_guide: {
-    carbs_pct: number;
-    protein_pct: number;
-    fat_pct: number;
-  };
-  workout_plan: {
-    weekly_frequency: number;
-    intensity: number;
-    exercises: {
-      name: string;
-      reason: string;
-      sets: number;
-      reps: string;
-      rest_sec: number;
-      cautions: string;
-    }[];
-  };
+type PlanStatus = "idle" | "syncing" | "generating" | "completed" | "error";
+
+interface FetchOptions {
+  skipSyncingState?: boolean;
 }
 
-// 로딩 상태 세분화해서 UI 애니메이션 분기 처리 가능하게 만듦
-export type PlanStatus =
-  | "syncing"
-  | "generating"
-  | "completed"
-  | "error"
-  | "idle";
+interface ValidationErrorDetails {
+  formatted?: Record<string, unknown>;
+  issues?: unknown[];
+  [key: string]: unknown;
+}
 
-export function useRecommendationPlan(userId: string | undefined) {
-  const [plan, setPlan] = useState<AIRecommendationPlan | null>(null);
+class PlanValidationError extends Error {
+  public code: string;
+  public details?: ValidationErrorDetails;
+
+  constructor(message: string, code: string, details?: ValidationErrorDetails) {
+    super(message);
+    this.name = "PlanValidationError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+const parseAndValidatePlanPayload = (rawData: unknown): AIPlanPayload => {
+  let parsedPayload = rawData;
+  if (typeof rawData === "string") {
+    try {
+      parsedPayload = JSON.parse(rawData);
+    } catch (e) {
+      throw new PlanValidationError(
+        "플랜 데이터 형식이 올바르지 않습니다.",
+        "PLAN_PARSE_ERROR",
+      );
+    }
+  }
+
+  const validationResult = AIPlanPayloadSchema.safeParse(parsedPayload);
+
+  if (!validationResult.success) {
+    const errorDetails = {
+      formatted: validationResult.error.format() as Record<string, unknown>,
+      issues: validationResult.error.issues,
+    };
+    throw new PlanValidationError(
+      "플랜 데이터 구조가 예상과 다릅니다.",
+      "PLAN_SCHEMA_INVALID",
+      errorDetails,
+    );
+  }
+
+  return validationResult.data;
+};
+
+export function useRecommendationPlan(userId?: string) {
+  const [plan, setPlan] = useState<AIPlanPayload | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [status, setStatus] = useState<PlanStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  // setTimeout이나 비동기 콜백 안에서 옛날 status 값(stale closure) 물고 늘어지는 거
-  // 방지하려고 최신 상태를 거울처럼 계속 비춰주는 Ref 하나 파둠
-  const statusRef = useRef<PlanStatus>(status);
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
+  const fetchIdRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  // isRetry 옵션 추가함. 재시도할 때 기존 데이터 화면에서 날려버리면
-  // 화면 하얗게 깜빡여서 UX 구려짐. 기존 플랜 유지하면서 로딩만 돌리게 함.
-  const fetchPlan = useCallback(async (isRetry = false) => {
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const fetchCurrentPlan = useCallback(async (options?: FetchOptions) => {
     if (!userId) return;
 
-    // 첫 진입일 때만 싹 비우고, 재시도면 에러 메시지만 지움
-    if (!isRetry) setPlan(null);
-    setError(null);
-    setStatus("syncing"); // 일단 서버랑 통신 시작함
+    fetchIdRef.current += 1;
+    const currentFetchId = fetchIdRef.current;
+    const { skipSyncingState = false } = options || {};
 
     try {
-      // 1. Edge Function 호출해서 현재 플랜 상태 확인
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "sync-ai-plan",
-      );
+      if (!skipSyncingState) setStatus("syncing");
 
-      if (fnError) {
-        // 단순 숫자가 아니라 진짜 HTTP 에러 객체인지 확인하고 429 골라냄
-        if (fnError instanceof FunctionsHttpError) {
-          const httpStatus = fnError.context?.status;
-          if (httpStatus === 429) {
-            console.log(
-              "서버가 이미 생성 중입니다. 생성 중 모드로 전환합니다.",
-            );
-            setStatus("generating");
-            return;
-          }
-        }
-        throw fnError; // 진짜 찐 에러면 catch 블록으로 던져버림
-      }
-
-      // 2. 캐시 히트면 바로 데이터 박고 종료함
-      if (data?.status === "cache_hit") {
-        setPlan(data.data.plan_payload);
-        setStatus("completed");
-      } else {
-        // 새로 생성 시작했거나 대기 중이면 생성 중 상태로 바꿈
-        setStatus("generating");
-      }
-    } catch (err: any) {
-      console.error("Edge Function 호출 에러:", err);
-      setStatus("error");
-
-      // Supabase 에러 종류 꼼꼼하게 따져서 메시지 쪼개줌
-      if (err instanceof FunctionsHttpError) {
-        const httpStatus = err.context?.status;
-        let serverErrorMsg = "";
-
-        // 엣지 함수가 뱉은 진짜 에러 바디(JSON) 파싱 일원화
-        // 여기서만 한 번 파싱해서 서버가 내려준 진짜 에러 이유를 뽑아냄
-        try {
-          const body = await err.context.json();
-          if (body?.error) serverErrorMsg = body.error;
-        } catch (e) {
-          // JSON 파싱 실패하면 무시함
-        }
-
-        if (httpStatus === 401) {
-          setError("로그인이 만료되었습니다. 다시 로그인이 필요합니다.");
-        } else if (httpStatus === 400) {
-          setError(
-            `입력 데이터 문제 발생: ${serverErrorMsg || "프로필 확인 요망"}`,
-          );
-        } else if (httpStatus && httpStatus >= 500) {
-          setError(
-            `AI 서버 오류 (${serverErrorMsg || "지연 됨"}). 재시도 해보세요.`,
-          );
-        } else {setError(
-            `서버 에러 발생 (${httpStatus}). 잠시 후 다시 시도해보세요.`,
-          );}
-      } else if (err instanceof FunctionsRelayError) {
-        // Relay 에러: Supabase Edge 네트워크 자체가 뻗었을 때
-        setError("서버 연결에 실패함. 네트워크 상태 확인 요망.");
-      } else if (err instanceof FunctionsFetchError) {
-        // Fetch 에러: 유저 폰 인터넷이 끊겼을 때
-        setError(
-          "서버로 요청을 보내지 못했습니다. 와이파이나 데이터가 켜져있는지 확인해주세요.",
-        );
-      } else {
-        // 그 외 알 수 없는 에러들
-        setError("추천 플랜을 가져오지 못했습니다. 알 수 없는 에러입니다.");
-      }
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    // 유저 바뀌면 찌꺼기 안 남게 싹 비움
-    if (!userId) {
-      setPlan(null);
-      setError(null);
-      setStatus("idle");
-      return;
-    }
-
-    let isMounted = true;
-    fetchPlan();
-
-    // 폴백(Fallback) 로직을 함수로 뺐음.
-    // 15초 뒤에 부르거나, 웹소켓 터졌을 때 즉시 부르려고 분리함.
-    const executeFallback = async () => {
-      // status 대신 항상 최신 상태를 담고 있는 statusRef.current를 까봄
-      // 이렇게 안 하면 플랜 다 만들어졌는데도 옛날 status 기억하고 헛짓거리함
-      if (
-        !isMounted || statusRef.current === "completed" ||
-        statusRef.current === "error"
-      ) return;
-
-      console.log(
-        "리얼타임 응답이 없거나 채널이 끊겼습니다. 직접 DB 조회를 시도합니다 (Fallback).",
-      );
-
-      // 폴백 조회 자체가 실패하는 경우(네트워크 단절 등)의 error까지 잡아냄
-      const { data, error: fallbackErr } = await supabase
+      const { data, error: fetchError } = await supabase
         .from("ai_plans")
         .select("*")
         .eq("user_id", userId)
@@ -171,86 +93,176 @@ export function useRecommendationPlan(userId: string | undefined) {
         .limit(1)
         .maybeSingle();
 
-      if (fallbackErr && isMounted) {
-        console.error("폴백 DB 조회 중 에러 발생:", fallbackErr);
-        setError(
-          "데이터를 동기화하는 중 문제가 발생했습니다. 네트워크를 확인해주세요.",
-        );
-        setStatus("error");
+      if (!isMountedRef.current || currentFetchId !== fetchIdRef.current) {
         return;
       }
 
-      if (data && isMounted) {
-        if (data.status === "completed") {
-          setPlan(data.plan_payload);
-          setStatus("completed");
-        } else if (data.status === "failed") {
-          setError(data.error_message || "플랜 생성 실패가 확인되었습니다.");
-          setStatus("error");
-        }
-      }
-    };
+      if (fetchError) throw fetchError;
 
-    // 3. 리얼타임 구독해서 DB 업데이트 감시함
+      if (!data) {
+        setStatus((prev) => prev === "generating" ? "generating" : "idle");
+        setPlan(null);
+        setCreatedAt(null);
+        setError(null);
+        return;
+      }
+
+      if (data.status === "completed" && data.plan_payload) {
+        const validatedPayload = parseAndValidatePlanPayload(data.plan_payload);
+
+        setPlan(validatedPayload);
+        setCreatedAt(data.created_at);
+        setStatus("completed");
+        setError(null);
+      } else if (data.status === "pending") {
+        setStatus("generating");
+      } else if (data.status === "failed") {
+        setStatus("error");
+        setError(data.error_message || "플랜 생성에 실패했습니다.");
+      } else {
+        setPlan(null);
+        setStatus("error");
+        setError("알 수 없는 플랜 상태입니다.");
+      }
+    } catch (err: unknown) {
+      if (!isMountedRef.current || currentFetchId !== fetchIdRef.current) {
+        return;
+      }
+
+      setPlan(null);
+      setStatus("error");
+
+      if (err instanceof PlanValidationError) {
+        if (err.code === "PLAN_PARSE_ERROR") {
+          setError(
+            "플랜 데이터를 읽는 중 문제가 발생했습니다. 다시 시도해 주세요.",
+          );
+        } else if (err.code === "PLAN_SCHEMA_INVALID") {
+          setError(
+            "플랜 데이터가 일부 손상되었습니다. 새로 생성이 필요합니다.",
+          );
+        } else setError(err.message);
+      } else if (err instanceof Error) {
+        setError(
+          "데이터를 불러오는 중 네트워크 또는 시스템 문제가 발생했습니다.",
+        );
+      } else {
+        setError("알 수 없는 문제가 발생했습니다.");
+      }
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) fetchCurrentPlan();
+  }, [userId, fetchCurrentPlan]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const uniqueChannelName = `ai_plans_${userId}_${
+      Math.random().toString(36).substring(2, 9)
+    }`;
     const channel = supabase
-      .channel(`plan_updates_${userId}`)
+      .channel(uniqueChannelName)
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "*",
           schema: "public",
           table: "ai_plans",
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          if (!isMounted) return;
-
-          const newRecord = payload.new;
-          if (newRecord.status === "completed") {
-            console.log("AI 플랜 생성이 완료 됐습니다. ");
-            setPlan(newRecord.plan_payload);
-            setStatus("completed");
-          } else if (newRecord.status === "failed") {
-            setError(
-              newRecord.error_message || "AI가 플랜 생성에 실패했습니다.",
-            );
-            setStatus("error");
-          }
+          fetchCurrentPlan({ skipSyncingState: true });
         },
       )
-      // 구독 상태(subStatus) 감시해서 문제 생기면 15초 안 기다리고 바로 폴백 때림
-      .subscribe((subStatus, err) => {
-        if (err) {
-          console.error("리얼타임 구독 에러 발생:", err);
-        }
-        // CLOSED 상태도 추가해서 채널 완전히 죽었을 때도 바로 폴백 때리게 만듦
-        if (
-          subStatus === "CHANNEL_ERROR" || subStatus === "TIMED_OUT" ||
-          subStatus === "CLOSED"
-        ) {
-          console.warn(
-            `리얼타임 연결 문제 발생 (${subStatus}). 폴백 로직을 즉시 실행합니다.`,
-          );
-          executeFallback();
-        }
-      });
-
-    // 기본적으로 15초 넘게 로딩 돌면 직접 DB 찔러보는 폴백 타이머 켬
-    const fallbackTimer = setTimeout(executeFallback, 15000);
+      .subscribe();
 
     return () => {
-      isMounted = false;
-      clearTimeout(fallbackTimer);
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchPlan]);
+  }, [userId, fetchCurrentPlan]);
 
-  // UI 컴포넌트에서 쓰기 좋게 plan, status, error 리턴하고
-  // 재시도할 때 화면 안 깜빡거리게 isRetry = true 옵션 넣어서 묶어줌
-  return {
-    plan,
-    status,
-    error,
-    retry: () => fetchPlan(true),
-  };
+  useEffect(() => {
+    let pollingInterval: ReturnType<typeof setInterval> | undefined;
+    if (status === "generating") {
+      pollingInterval = setInterval(() => {
+        fetchCurrentPlan({ skipSyncingState: true });
+      }, 3000);
+    }
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [status, fetchCurrentPlan]);
+
+  const retry = useCallback(async () => {
+    if (!userId) return;
+
+    setStatus("generating");
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("AUTH_EXPIRED");
+
+      const { error: invokeError } = await supabase.functions.invoke(
+        "sync-ai-plan",
+        {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
+
+      if (invokeError) throw invokeError;
+      await fetchCurrentPlan({ skipSyncingState: true });
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setStatus("error");
+
+      // 에러 코드별 세분화된 UX 라이팅 제공
+      if (err && typeof err === "object" && "context" in err) {
+        try {
+          const payload = await (err as any).context.json();
+          const code = payload?.error?.code;
+
+          if (code === "AUTH_ERROR") {
+            setError("로그인이 필요합니다. 다시 로그인해 주세요.");
+          } else if (code === "VALIDATION_ERROR" || code === "PARSE_ERROR") {
+            setError("AI 추천 데이터가 올바르지 않습니다. 다시 시도해 주세요.");
+          } else if (code === "NETWORK_ERROR" || code === "LLM_ERROR") {
+            setError(
+              "AI 서버와 연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.",
+            );
+          } else if (code === "DB_ERROR" || code === "DB_UPDATE_ERROR") {
+            setError(
+              "서버에 플랜을 저장하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+            );
+          } else {setError(
+              payload?.error?.message || "플랜 갱신에 실패했습니다.",
+            );}
+          return;
+        } catch (e) {}
+      }
+
+      if (err instanceof Error && err.message === "AUTH_EXPIRED") {
+        setError("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+      } else {
+        setError(
+          "플랜 갱신 요청에 실패했습니다. 네트워크 상태를 확인해주세요.",
+        );
+      }
+    }
+  }, [userId, fetchCurrentPlan]);
+
+  let currentDay = 1;
+  if (createdAt) {
+    const createdDate = new Date(createdAt);
+    createdDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - createdDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    currentDay = (Math.max(0, diffDays) % 7) + 1;
+  }
+
+  return { plan, createdAt, currentDay, status, error, retry };
 }
