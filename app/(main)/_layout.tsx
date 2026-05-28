@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Home, Dumbbell, User } from 'lucide-react-native';
+import { Home, Dumbbell, User, Calendar } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // 메인 하단 탭 네비게이션 레이아웃
@@ -49,6 +49,14 @@ export default function MainLayout() {
         options={{
           title: '운동',
           tabBarIcon: ({ color, size }) => <Dumbbell size={size} color={color} />,
+        }}
+      />
+      {/* 캘린더 탭 추가 */}
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: '캘린더',
+          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
         }}
       />
       <Tabs.Screen

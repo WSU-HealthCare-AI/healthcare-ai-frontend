@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
 import * as SplashScreen from 'expo-splash-screen';
 import { supabase } from '@/src/shared/api/supabase';
@@ -13,6 +14,17 @@ WebBrowser.maybeCompleteAuthSession();
 
 // 앱이 처음 켜질 때 네이티브 스플래시 화면이 멋대로 사라지는 것을 강제로 막음
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// 1. React Query 글로벌 캐시 관리를 위한 싱글톤 QueryClient 인스턴스 정의
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2, // 네트워크 실패 시 최대 2회 재시도
+      refetchOnWindowFocus: false, // 앱이 포커스를 얻었을 때 자동 리프레시 방지
+      staleTime: 1000 * 60 * 5, // 5분 동안은 캐시된 데이터를 Fresh 상태로 유지
+    },
+  },
+});
 
 export default function RootLayout() {
   const router = useRouter();
@@ -149,26 +161,29 @@ export default function RootLayout() {
   ]);
 
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-        <Stack.Screen name="(main)" />
-        <Stack.Screen name="onboarding/index" />
-        <Stack.Screen name="onboarding/inbody" />
-        <Stack.Screen name="onboarding/complete" />
-        <Stack.Screen name="welcome" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-      </Stack>
+    // 2. React Query의 QueryClientProvider를 가장 바깥쪽에 결합하여 전역 하위 화면의 튕김 방지 및 통신 상태 공유 보장
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+          <Stack.Screen name="(main)" />
+          <Stack.Screen name="onboarding/index" />
+          <Stack.Screen name="onboarding/inbody" />
+          <Stack.Screen name="onboarding/complete" />
+          <Stack.Screen name="welcome" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+        </Stack>
 
-      {/* 로딩 오버레이 */}
-      {showOverlay && (
-        <View className="absolute inset-0 z-[9999] items-center justify-center bg-white">
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text className="mt-4 font-medium text-gray-500">
-            {isAuthProcessing ? '로그인 처리 중...' : '동기화 중...'}
-          </Text>
-        </View>
-      )}
-    </SafeAreaProvider>
+        {/* 로딩 오버레이 */}
+        {showOverlay && (
+          <View className="absolute inset-0 z-[9999] items-center justify-center bg-white">
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text className="mt-4 font-medium text-gray-500">
+              {isAuthProcessing ? '로그인 처리 중...' : '동기화 중...'}
+            </Text>
+          </View>
+        )}
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }
