@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { View, Text, Animated, Easing } from 'react-native';
 import { Brain } from 'lucide-react-native';
 
 export function AiFeedbackCard({ feedback }: { feedback: string }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [pulse] = React.useState(() => new Animated.Value(0));
+  const [fadeAnim] = React.useState(() => new Animated.Value(0));
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {

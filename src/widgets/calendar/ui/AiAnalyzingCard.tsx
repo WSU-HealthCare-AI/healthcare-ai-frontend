@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { View, Text, Animated, Easing } from 'react-native';
 import { Brain } from 'lucide-react-native';
 
 export function AiAnalyzingCard({ step }: { step: number }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const rotation = useRef(new Animated.Value(0)).current;
+  const [pulse] = React.useState(() => new Animated.Value(0));
+  const [rotation] = React.useState(() => new Animated.Value(0));
 
   React.useEffect(() => {
     const pulseAnim = Animated.loop(

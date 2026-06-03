@@ -116,7 +116,6 @@ export function FeedbackForm({
         <TextInput
           value={notes}
           onChangeText={setNotes}
-          // 플레이스홀더 클릭하면 사라지게 하는 법
           placeholderTextColor="#9CA3AF"
           placeholder="식단 구성이 만족스러웠고, 월 푸쉬업 동작 시 무리 없이 편안했습니다."
           className="rounded-xl border border-gray-200 bg-white p-3.5 text-sm text-gray-800"

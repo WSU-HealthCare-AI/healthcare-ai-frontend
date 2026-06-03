@@ -37,10 +37,9 @@
       "expo-router",
       "expo-web-browser",
       [
-        "react-native-vision-camera",
+        "./plugins/withVisionCamera",
         {
-          "cameraPermissionText": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다.",
-          "enableCodeScanner": false
+          "cameraPermissionText": "AI 실시간 자세 분석을 위해 카메라 접근 권한이 필요합니다."
         }
       ],
       [
@@ -48,12 +47,12 @@
         {
           "android": {
             "minSdkVersion": 26,
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "kotlinVersion": "2.1.0"
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "kotlinVersion": "2.1.20"
           },
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "17.0"
           }
         }
       ],
