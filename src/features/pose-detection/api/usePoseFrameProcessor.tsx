@@ -17,6 +17,7 @@ export function usePoseFrameProcessor() {
 
   const prevLandmarks = useSharedValue<NormalizedLandmark[] | null>(null); // 이전 프레임의 랜드마크
   const lostTrackingCounter = useSharedValue<number>(0); // 트래킹 손실 카운터
+  const isLegSwapped = useSharedValue<boolean>(false); // 다리 좌우 스왑 상태 누적 저장
 
   // 매 프레임 {x, y, z...} 객체 재생성을 억제하기 위한 영구 재사용 객체 배열 (useRef를 사용하여 컴파일러 뮤테이션 에러 방지)
   const cachedLandmarks = useRef<NormalizedLandmark[]>(
@@ -66,7 +67,20 @@ export function usePoseFrameProcessor() {
           if (lms && lms.length >= 165) {
             // --- 💡 [시간적 일관성 기반 하반신 스왑 필터] ---
             const previous = prevLandmarks.value;
-            if (previous) {
+
+            const kneeLVis = lms[25 * 5 + 3];
+            const kneeRVis = lms[26 * 5 + 3];
+            const ankleLVis = lms[27 * 5 + 3];
+            const ankleRVis = lms[28 * 5 + 3];
+
+            // 1. 두 다리가 모두 명확히 감지되는 상황(모두 가시성 >= 0.35)에서만 스왑 여부를 새로 연산 및 결정
+            if (
+              previous &&
+              kneeLVis >= 0.35 &&
+              kneeRVis >= 0.35 &&
+              ankleLVis >= 0.35 &&
+              ankleRVis >= 0.35
+            ) {
               const prevKneeLx = previous[25].x;
               const prevKneeLy = previous[25].y;
               const prevKneeRx = previous[26].x;
@@ -87,45 +101,50 @@ export function usePoseFrameProcessor() {
               const currAnkleRx = lms[28 * 5];
               const currAnkleRy = lms[28 * 5 + 1];
 
-              const kneeLVis = lms[25 * 5 + 3];
-              const kneeRVis = lms[26 * 5 + 3];
-              const ankleLVis = lms[27 * 5 + 3];
-              const ankleRVis = lms[28 * 5 + 3];
+              // 정상 매칭의 2D 이동 거리 합
+              const distNormal =
+                Math.hypot(currKneeLx - prevKneeLx, currKneeLy - prevKneeLy) +
+                Math.hypot(currKneeRx - prevKneeRx, currKneeRy - prevKneeRy) +
+                Math.hypot(currAnkleLx - prevAnkleLx, currAnkleLy - prevAnkleLy) +
+                Math.hypot(currAnkleRx - prevAnkleRx, currAnkleRy - prevAnkleRy);
 
-              // 감지된 무릎/발목 관절 중 최소 한쪽의 가시성이 유의미할 때만 스왑 계산 수행 (심한 노이즈로 인한 오작동 방지)
-              if ((kneeLVis > 0.2 || kneeRVis > 0.2) && (ankleLVis > 0.2 || ankleRVis > 0.2)) {
-                // 정상 매칭의 2D 이동 거리 합
-                const distNormal =
-                  Math.hypot(currKneeLx - prevKneeLx, currKneeLy - prevKneeLy) +
-                  Math.hypot(currKneeRx - prevKneeRx, currKneeRy - prevKneeRy) +
-                  Math.hypot(currAnkleLx - prevAnkleLx, currAnkleLy - prevAnkleLy) +
-                  Math.hypot(currAnkleRx - prevAnkleRx, currAnkleRy - prevAnkleRy);
+              // 스왑 매칭의 2D 이동 거리 합
+              const distSwap =
+                Math.hypot(currKneeRx - prevKneeLx, currKneeRy - prevKneeLy) +
+                Math.hypot(currKneeLx - prevKneeRx, currKneeLy - prevKneeRy) +
+                Math.hypot(currAnkleRx - prevAnkleLx, currAnkleRy - prevAnkleLy) +
+                Math.hypot(currAnkleLx - prevAnkleRx, currAnkleLy - prevAnkleRy);
 
-                // 스왑 매칭의 2D 이동 거리 합
-                const distSwap =
-                  Math.hypot(currKneeRx - prevKneeLx, currKneeRy - prevKneeLy) +
-                  Math.hypot(currKneeLx - prevKneeRx, currKneeLy - prevKneeRy) +
-                  Math.hypot(currAnkleRx - prevAnkleLx, currAnkleRy - prevAnkleLy) +
-                  Math.hypot(currAnkleLx - prevAnkleRx, currAnkleLy - prevAnkleRy);
-
-                // 스왑했을 때의 움직임 궤적이 훨씬 자연스럽고(0.08 이상 더 짧을 때) 일치할 경우 하반신 전체 세트 스왑
-                if (distSwap < distNormal - 0.08) {
-                  const LEG_PAIRS = [[23, 24], [25, 26], [27, 28], [29, 30], [31, 32]];
-                  LEG_PAIRS.forEach(([lIdx, rIdx]) => {
-                    const lStart = lIdx * 5;
-                    const rStart = rIdx * 5;
-                    for (let offset = 0; offset < 5; offset++) {
-                      const temp = lms[lStart + offset];
-                      lms[lStart + offset] = lms[rStart + offset];
-                      lms[rStart + offset] = temp;
-                    }
-                  });
-                }
+              // 스왑했을 때의 움직임 궤적이 훨씬 자연스럽고(0.08 이상 더 짧을 때) 일치할 경우 스왑 상태로 판정
+              if (distSwap < distNormal - 0.08) {
+                isLegSwapped.value = true;
+              } else if (distNormal < distSwap - 0.08) {
+                isLegSwapped.value = false;
               }
+              // 그 외 발 가려짐, 이탈 등의 애매한 구간에서는 기존 스왑 잠금 상태(isLegSwapped.value)를 그대로 유지하여 오작동 차단
+            }
+
+            // 2. 결정된 스왑 상태에 따라 하반신 관절(골반 [23, 24]은 몸통 뒤틀림 방지를 위해 영구 제외)을 교체
+            if (isLegSwapped.value) {
+              const LEG_PAIRS = [
+                [25, 26],
+                [27, 28],
+                [29, 30],
+                [31, 32],
+              ];
+              LEG_PAIRS.forEach(([lIdx, rIdx]) => {
+                const lStart = lIdx * 5;
+                const rStart = rIdx * 5;
+                for (let offset = 0; offset < 5; offset++) {
+                  const temp = lms[lStart + offset];
+                  lms[lStart + offset] = lms[rStart + offset];
+                  lms[rStart + offset] = temp;
+                }
+              });
             }
             // ------------------------------------------------------------------
 
-            // --- 💡 [가시성 비례 동적 스무딩(EMA) 필터] ---
+            // --- [가시성 비례 동적 스무딩(EMA) 필터] ---
             for (let i = 0; i < 33; i++) {
               const idx = i * 5;
               const currX = lms[idx];
@@ -135,10 +154,15 @@ export function usePoseFrameProcessor() {
               const presence = lms[idx + 4];
 
               if (previous && previous[i]) {
-                // 가시성이 높으면 최신 추론을 빠르게 반영하고(0.85), 가시성이 낮으면 이전의 정상값을 지키도록 가중치 동적 축소(최소 0.05)
+                // 가시성이 높으면 최신 추론을 빠르게 반영하고(0.85), 가시성이 낮으면 이전의 정상값을 지키도록 가중치 동적 축소
+                // 가시성이 0.15 미만으로 떨어져 화면에서 이탈한 경우 100% 이전 프레임 좌표를 완전히 고정(Freeze)하여 튐 차단
                 let smoothWeight = 0.85;
                 if (visibility < 0.5) {
-                  smoothWeight = Math.max(0.05, 0.85 * (visibility / 0.5));
+                  if (visibility < 0.15) {
+                    smoothWeight = 0; // 가시성 극소 시 100% 이전 데이터 유지 (프리징)
+                  } else {
+                    smoothWeight = 0.85 * ((visibility - 0.15) / 0.35); // 0.15 ~ 0.5 구간 선형 보간 적용
+                  }
                 }
 
                 cachedLandmarks[i].x = currX * smoothWeight + previous[i].x * (1 - smoothWeight);
@@ -146,8 +170,10 @@ export function usePoseFrameProcessor() {
                 cachedLandmarks[i].z = currZ * smoothWeight + previous[i].z * (1 - smoothWeight);
 
                 // 가시성 수치 자체도 EMA를 적용하여 프레임 깜빡임(Flickering)과 선 찢어짐을 차단
-                cachedLandmarks[i].visibility = visibility * smoothWeight + previous[i].visibility * (1 - smoothWeight);
-                cachedLandmarks[i].presence = presence * smoothWeight + previous[i].presence * (1 - smoothWeight);
+                cachedLandmarks[i].visibility =
+                  visibility * smoothWeight + previous[i].visibility * (1 - smoothWeight);
+                cachedLandmarks[i].presence =
+                  presence * smoothWeight + previous[i].presence * (1 - smoothWeight);
               } else {
                 cachedLandmarks[i].x = currX;
                 cachedLandmarks[i].y = currY;
@@ -178,7 +204,6 @@ export function usePoseFrameProcessor() {
             }
 
             // Reanimated 감지를 위해 1차원 배열의 얕은 복사본(Shallow copy)만 할당
-            // (배열 내부의 33개 {x,y,z...} 객체는 그대로 유지되므로 메모리 오버헤드가 사실상 0에 가깝습니다)
             poseLandmarks.value = [...cachedLandmarks];
           }
         } else {
@@ -187,6 +212,7 @@ export function usePoseFrameProcessor() {
 
           if (lostTrackingCounter.value > 5) {
             prevLandmarks.value = null;
+            isLegSwapped.value = false; // 스왑 상태 초기화
             consecutiveFrames.value = 0;
             if (lastStableState.value !== false) {
               lastStableState.value = false;
@@ -202,6 +228,7 @@ export function usePoseFrameProcessor() {
 
         if (lostTrackingCounter.value > 5) {
           prevLandmarks.value = null;
+          isLegSwapped.value = false; // 스왑 상태 초기화
           consecutiveFrames.value = 0;
           if (lastStableState.value !== false) {
             lastStableState.value = false;
