@@ -1,0 +1,10 @@
+diff --git a/node_modules/react-native-vision-camera/lib/CameraDevices.js b/node_modules/react-native-vision-camera/lib/CameraDevices.js
+index 3541b61..b7df260 100644
+--- a/node_modules/react-native-vision-camera/lib/CameraDevices.js
++++ b/node_modules/react-native-vision-camera/lib/CameraDevices.js
+@@ -1,4 +1,4 @@
+-import { VisionCamera } from './VisionCamera';
++import { VisionCamera } from './VisionCamera.js';
+ // this caches our Camera Devices
+ let cameraDevices = [];
+ const listeners = [];

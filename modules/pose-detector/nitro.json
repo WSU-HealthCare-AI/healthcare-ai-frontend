@@ -1,0 +1,19 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["posedetector"],
+  "ios": {
+    "iosModuleName": "PoseDetector"
+  },
+  "android": {
+    "androidNamespace": ["posedetector"],
+    "androidCxxLibName": "PoseDetector"
+  },
+  "autolinking": {
+    "PoseDetector": {
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "PoseDetector"
+      }
+    }
+  }
+}

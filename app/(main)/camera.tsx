@@ -10,8 +10,7 @@ export default function CameraScreen() {
 
   return (
     <View className="flex-1 bg-black">
-      {/* 핵심 비전 및 렌더링 로직은 WorkoutCameraWidget 내부에 캡슐화됨 */}
-      <WorkoutCameraWidget />
+      <WorkoutCameraWidget onBack={() => router.back()} workoutName="스쿼트 자세 분석" />
 
       {/* 상단/하단 UI 오버레이 (Absolute 포지셔닝) */}
       <SafeAreaView

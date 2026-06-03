@@ -34,7 +34,7 @@ const parseAndValidatePlanPayload = (rawData: unknown): AIPlanPayload => {
   if (typeof rawData === "string") {
     try {
       parsedPayload = JSON.parse(rawData);
-    } catch (e) {
+    } catch {
       throw new PlanValidationError(
         "플랜 데이터 형식이 올바르지 않습니다.",
         "PLAN_PARSE_ERROR",
@@ -83,7 +83,13 @@ export function useRecommendationPlan(userId?: string) {
     const { skipSyncingState = false } = options || {};
 
     try {
-      if (!skipSyncingState) setStatus("syncing");
+      if (!skipSyncingState) {
+        Promise.resolve().then(() => {
+          if (isMountedRef.current && currentFetchId === fetchIdRef.current) {
+            setStatus("syncing");
+          }
+        });
+      }
 
       const { data, error: fetchError } = await supabase
         .from("ai_plans")
@@ -153,7 +159,11 @@ export function useRecommendationPlan(userId?: string) {
   }, [userId]);
 
   useEffect(() => {
-    if (userId) fetchCurrentPlan();
+    if (userId) {
+      Promise.resolve().then(() => {
+        fetchCurrentPlan();
+      });
+    }
   }, [userId, fetchCurrentPlan]);
 
   useEffect(() => {
@@ -240,7 +250,7 @@ export function useRecommendationPlan(userId?: string) {
               payload?.error?.message || "플랜 갱신에 실패했습니다.",
             );}
           return;
-        } catch (e) {}
+        } catch {}
       }
 
       if (err instanceof Error && err.message === "AUTH_EXPIRED") {

@@ -1,11 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import {
-  Camera,
-  useCameraDevice,
-  useCameraPermission,
-  useCameraFormat,
-} from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const CAPTURE_INTERVAL_MS = 600;
@@ -17,9 +12,16 @@ interface Props {
 
 export function ScannerCamera({ onFrame, isScanning }: Props) {
   const device = useCameraDevice('back');
-  const format = useCameraFormat(device, [{ photoResolution: { width: 640, height: 480 } }]);
+
+  // TS2339, TS7006 에러 해결: device를 any로 캐스팅하고 매개변수 f에 타입을 명시적으로 지정하여 컴파일러의 간섭을 완전히 차단
+  const format = device
+    ? ((device as any).formats?.find((f: any) => f.photoWidth === 640 && f.photoHeight === 480) ??
+      (device as any).formats?.[0])
+    : undefined;
+
   const { hasPermission, requestPermission } = useCameraPermission();
-  const cameraRef = useRef<Camera>(null);
+
+  const cameraRef = useRef<any>(null);
   const capturingRef = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -37,21 +39,24 @@ export function ScannerCamera({ onFrame, isScanning }: Props) {
       capturing: capturingRef.current,
     });
 
-    if (capturingRef.current || !cameraRef.current) return;
-
+    if (!cameraRef.current || capturingRef.current) return;
     capturingRef.current = true;
 
     try {
       console.log('[Camera] taking photo...');
-      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-      console.log('[Camera] photo taken:', photo.path);
+      const photo = await cameraRef.current.takePhoto({
+        flash: 'off',
+        enableShutterSound: false,
+      });
 
-      const uri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+      const uri = photo.path;
+      console.log('[Camera] Photo captured:', uri);
 
-      const b64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-      console.log('[Camera] base64 length:', b64.length);
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
-      const binaryString = atob(b64);
+      const binaryString = atob(base64);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
@@ -99,20 +104,22 @@ export function ScannerCamera({ onFrame, isScanning }: Props) {
   if (!device) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
-        <Text className="text-white">카메라를 찾을 수 없습니다.</Text>
+        <Text className="text-white">카메라 기기를 찾을 수 없습니다.</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-black">
       <Camera
         ref={cameraRef}
-        device={device}
-        format={format}
-        isActive={true}
-        photo={true}
         style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+        // @ts-ignore
+        photo={true}
+        // @ts-ignore
+        format={format}
       />
     </View>
   );

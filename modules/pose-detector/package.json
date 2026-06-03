@@ -1,0 +1,21 @@
+{
+  "name": "react-native-pose-detector",
+  "version": "1.0.0",
+  "description": "MediaPipe Pose Landmarker integration for React Native VisionCamera v5 using Nitro Modules",
+  "main": "src/index.ts",
+  "files": [
+    "src",
+    "android/build.gradle",
+    "android/src",
+    "nitro.json"
+  ],
+  "dependencies": {
+    "react-native-nitro-modules": "*"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-nitro-modules": "*",
+    "react-native-vision-camera": "*"
+  }
+}

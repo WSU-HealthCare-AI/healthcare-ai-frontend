@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { Keyboard, Platform, ScrollView } from 'react-native';
+import { Keyboard, ScrollView } from 'react-native';
 import { useAuthStore } from '@/src/entities/user/model/authStore';
 import {
   useActiveAiPlan,
@@ -126,11 +126,6 @@ export default function CalendarScreen() {
   const isChecklistDisabled = isFutureDate || !isPlanWeekSelected;
   const isTabsDisabled = !isPlanWeekSelected || isFutureDate;
 
-  useEffect(() => {
-    if (isTabsDisabled && activeTab !== 'checklist') {
-      setActiveTab('checklist');
-    }
-  }, [isTabsDisabled, activeTab]);
 
   const disabledNotice = useMemo(() => {
     if (planDateState === 'after_plan') {
@@ -344,26 +339,28 @@ export default function CalendarScreen() {
   }, [selectedDateStr, monthlyLogs, activePlan, getPlanDayForDate]);
 
   // 12. 폼 필드 로컬 싱크 동기화 (날짜 변경 시 자동으로 기존 입력값 로드)
-  useEffect(() => {
-    if (isAnalyzing) return;
+  const [prevLog, setPrevLog] = useState<any>(null);
+  const [prevDateStr, setPrevDateStr] = useState(selectedDateStr);
 
-    if (selectedLog) {
-      setFatigue(selectedLog.fatigue_level ?? 3);
-      setPain(selectedLog.pain_level ?? 3);
-      setNotes(selectedLog.user_notes ?? '');
-      if (selectedLog.ai_coaching_feedback) {
-        setShowFeedback(true);
+  if (selectedLog !== prevLog || selectedDateStr !== prevDateStr) {
+    setPrevLog(selectedLog);
+    setPrevDateStr(selectedDateStr);
+    
+    if (!isAnalyzing) {
+      if (selectedLog) {
+        setFatigue(selectedLog.fatigue_level ?? 3);
+        setPain(selectedLog.pain_level ?? 3);
+        setNotes(selectedLog.user_notes ?? '');
+        setShowFeedback(!!selectedLog.ai_coaching_feedback);
       } else {
+        setFatigue(3);
+        setPain(3);
+        setNotes('');
         setShowFeedback(false);
       }
-    } else {
-      setFatigue(3);
-      setPain(3);
-      setNotes('');
-      setShowFeedback(false);
+      setIsAnalyzing(false);
     }
-    setIsAnalyzing(false);
-  }, [selectedLog, selectedDateStr, isAnalyzing]);
+  }
 
   // 13. 체크박스 상호작용 및 기록 저장 로직
   const toggleExercise = async (exerciseName: string) => {
@@ -467,7 +464,7 @@ export default function CalendarScreen() {
       setSelectedDateStr={setSelectedDateStr}
       calendarKey={calendarKey}
       setCalendarKey={setCalendarKey}
-      activeTab={activeTab}
+      activeTab={isTabsDisabled ? 'checklist' : activeTab}
       setActiveTab={setActiveTab}
       fatigue={fatigue}
       setFatigue={setFatigue}

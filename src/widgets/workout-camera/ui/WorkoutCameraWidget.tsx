@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, LogBox } from 'react-native';
 import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-  useCameraFormat,
 } from 'react-native-vision-camera';
 import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import { useDerivedValue } from 'react-native-reanimated';
 import { usePoseFrameProcessor } from '@/src/features/pose-detection/api/usePoseFrameProcessor';
+
+LogBox.ignoreLogs(['[react-native-skia]']);
 
 const POSE_CONNECTIONS = [
   [8, 6],
@@ -44,33 +45,34 @@ const POSE_JOINTS = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
 ]; // 관절을 원으로 표시할 인덱스 목록
 
-export const WorkoutCameraWidget = () => {
+interface WorkoutCameraWidgetProps {
+  onBack?: () => void;
+  workoutName?: string;
+}
+
+export const WorkoutCameraWidget = ({ onBack, workoutName }: WorkoutCameraWidgetProps) => {
   const { hasPermission, requestPermission } = useCameraPermission(); // 카메라 권한 상태/요청 훅
   const device = useCameraDevice('front'); // 전면 카메라 디바이스 선택
   const [layout, setLayout] = useState({ width: 0, height: 0 }); // 화면 레이아웃 크기 저장
 
-  const { poseLandmarks, frameProcessor, isStable } = usePoseFrameProcessor(); // 포즈 데이터 + 프레임 프로세서 훅
-
-  const format = useCameraFormat(device, [
-    { videoResolution: { width: 1280, height: 720 } },
-    { fps: 30 },
-  ]); // 카메라 포맷 우선순위 요청
+  const { poseLandmarks, frameOutput, isStable } = usePoseFrameProcessor(); // 포즈 데이터 + 프레임 아웃풋 훅
 
   useEffect(() => {
     if (!hasPermission) requestPermission(); // 권한이 없으면 요청
   }, [hasPermission, requestPermission]);
 
   const skeletonPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
-
-    // 캔버스 크기가 측정되기 전엔 그릴 수 없음
-    if (layout.width === 0) return path;
+    // 캔버스 크기가 측정되기 전이나 랜드마크가 없으면 빈 경로 반환
+    if (layout.width === 0) {
+      return Skia.PathBuilder.Make().build();
+    }
 
     const landmarks = poseLandmarks.value;
     if (!landmarks) {
-      // 랜드마크가 없으면 빈 경로 반환
-      return path;
+      return Skia.PathBuilder.Make().build();
     }
+
+    const builder = Skia.PathBuilder.Make();
 
     const cameraAspectRatio = 9 / 16; // 카메라 비율 보정 값
     const actualCameraWidth = layout.height * cameraAspectRatio; // 실제 카메라 너비 계산
@@ -78,11 +80,18 @@ export const WorkoutCameraWidget = () => {
 
     const getCoords = (idx: number) => {
       const lm = landmarks[idx];
-      if (!lm || lm.visibility < 0.5) return null; // 가시성이 낮으면 무시
+      if (!lm) return null;
+
+      // 가시성 필터 기준을 합리적으로 완화하여 동적 EMA 스무딩 결과가 부드럽게 렌더링되도록 차단 해제
+      const LEG_JOINTS_ALL = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+      const isLegJoint = LEG_JOINTS_ALL.includes(idx);
+      const minVis = isLegJoint ? 0.15 : 0.2; // 일반 관절은 0.2, 다리 관절은 0.15 기준 적용
+
+      if (lm.visibility < minVis) return null;
 
       return {
-        x: (1 - lm.y) * actualCameraWidth - offsetX, // 모델 좌표 -> 화면 X 변환
-        y: (1 - lm.x) * layout.height, // 모델 좌표 -> 화면 Y 변환
+        x: lm.x * actualCameraWidth - offsetX, // 네이티브 단에서 이미 미러링+회전이 완료되었으므로 정방향 lm.x 적용
+        y: lm.y * layout.height,               // 네이티브 단에서 물리 회전이 완료되었으므로 정방향 lm.y 적용
       };
     };
 
@@ -91,8 +100,8 @@ export const WorkoutCameraWidget = () => {
       const p1 = getCoords(startIdx);
       const p2 = getCoords(endIdx);
       if (p1 && p2) {
-        path.moveTo(p1.x, p1.y);
-        path.lineTo(p2.x, p2.y);
+        builder.moveTo(p1.x, p1.y);
+        builder.lineTo(p2.x, p2.y);
       }
     });
 
@@ -100,11 +109,11 @@ export const WorkoutCameraWidget = () => {
     POSE_JOINTS.forEach((idx) => {
       const pt = getCoords(idx);
       if (pt) {
-        path.addCircle(pt.x, pt.y, 4);
+        builder.addCircle(pt.x, pt.y, 4);
       }
     });
 
-    return path;
+    return builder.build();
   }, [layout, poseLandmarks]);
 
   if (!hasPermission)
@@ -127,18 +136,16 @@ export const WorkoutCameraWidget = () => {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
-        frameProcessor={frameProcessor} // 프레임마다 포즈 추론 실행
-        pixelFormat="rgb"
+        outputs={[frameOutput]} // 프레임마다 포즈 추론 실행
+        constraints={[{ fps: 30 }, { videoStabilizationMode: 'off' }]} // 30 FPS 및 비디오 안정화 꺼짐 제약 조건 적용
         resizeMode="cover"
-        format={format}
-        videoStabilizationMode="off"
       />
 
       {!isStable && (
         <View className="absolute inset-0 z-20 items-center justify-center bg-black/40">
           <View className="items-center rounded-2xl bg-black/70 px-6 py-4">
             <ActivityIndicator size="large" color="#00FFCC" />
-            <Text className="mt-3 text-base font-bold text-[#00FFCC]">자세 인식 중...</Text>{' '}
+            <Text className="mt-3 text-base font-bold text-[#00FFCC]">자세 인식 중...</Text>
             {/* 안정화 대기 오버레이 */}
           </View>
         </View>

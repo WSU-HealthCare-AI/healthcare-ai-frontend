@@ -7,5 +7,6 @@
     },
     "types": ["node"]
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts", "nativewind-env.d.ts", "plugins/**/*.ts"]
+  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts", "nativewind-env.d.ts", "plugins/**/*.ts"],
+  "exclude": ["supabase"]
 }

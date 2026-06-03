@@ -33,7 +33,7 @@ const withAndroidAppGradle = (config) => {
   });
 };
 
-// 네이티브 파일 복사 및 MainApplication.kt 패치 (플러그인 등록, 모델 복사)
+// 네이티브 파일 복사 및 모델 복사
 const withAndroidNativeFiles = (config) => {
   return withDangerousMod(config, [
     'android',
@@ -50,51 +50,8 @@ const withAndroidNativeFiles = (config) => {
         'wsu',
         'fitmate'
       );
-      const sourceDir = path.join(projectRoot, 'plugins', 'android');
 
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true }); // 타깃 디렉토리 생성
-
-      // PoseLandmarkerPlugin.kt 복사
-      const pluginFileName = 'PoseLandmarkerPlugin.kt';
-      const sourceFile = path.join(sourceDir, pluginFileName);
-      const targetFile = path.join(targetDir, pluginFileName);
-      if (fs.existsSync(sourceFile)) fs.copyFileSync(sourceFile, targetFile); // 플러그인 소스 복사
-
-      // MainApplication.kt에 FrameProcessor 등록 및 applicationContext 주입
-      const mainAppPath = path.join(targetDir, 'MainApplication.kt');
-      if (fs.existsSync(mainAppPath)) {
-        let mainAppContent = fs.readFileSync(mainAppPath, 'utf8');
-
-        // 필요한 import가 없으면 추가
-        if (
-          !mainAppContent.includes(
-            'import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry'
-          )
-        ) {
-          mainAppContent = mainAppContent.replace(
-            'package com.wsu.fitmate',
-            'package com.wsu.fitmate\n\nimport com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry'
-          );
-        }
-
-        // FrameProcessor 등록 코드 삽입 또는 context 인자 보정
-        if (
-          !mainAppContent.includes(
-            'FrameProcessorPluginRegistry.addFrameProcessorPlugin("detectPose")'
-          )
-        ) {
-          mainAppContent = mainAppContent.replace(
-            'super.onCreate()',
-            'super.onCreate()\n    // VisionCamera(v4) Frame Processor 등록\n    FrameProcessorPluginRegistry.addFrameProcessorPlugin("detectPose") { proxy, options -> PoseLandmarkerPlugin(this.applicationContext, proxy, options) }'
-          );
-        } else if (!mainAppContent.includes('this.applicationContext')) {
-          mainAppContent = mainAppContent.replace(
-            'PoseLandmarkerPlugin(proxy, options)',
-            'PoseLandmarkerPlugin(this.applicationContext, proxy, options)'
-          );
-        }
-        fs.writeFileSync(mainAppPath, mainAppContent); // 수정사항 저장
-      }
 
       // MediaPipe 모델 파일을 Android assets로 복사 (full 모델 사용)
       const sourceModelPath = path.join(

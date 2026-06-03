@@ -113,6 +113,15 @@ export default function RootLayout() {
     isCorrectScreen &&
     rootNavigationState?.key;
 
+  // 렌더링 중 상태 조정 (isFullyReady가 false가 되면 즉시 오버레이를 다시 활성화)
+  const [prevIsFullyReady, setPrevIsFullyReady] = useState(isFullyReady);
+  if (isFullyReady !== prevIsFullyReady) {
+    setPrevIsFullyReady(isFullyReady);
+    if (!isFullyReady) {
+      setShowOverlay(true);
+    }
+  }
+
   // 라우팅 결정 및 오버레이 제거 로직
   useEffect(() => {
     if (!isReady || isProfileLoading || isAuthProcessing || !rootNavigationState?.key) return;
@@ -142,8 +151,6 @@ export default function RootLayout() {
       }, 300);
 
       return () => clearTimeout(timer);
-    } else {
-      setShowOverlay(true);
     }
   }, [
     session,
