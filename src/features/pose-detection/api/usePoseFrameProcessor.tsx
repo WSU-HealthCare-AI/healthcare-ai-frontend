@@ -65,7 +65,7 @@ export function usePoseFrameProcessor() {
           const lms = new Float32Array(resultBuffer);
 
           if (lms && lms.length >= 165) {
-            // --- 💡 [시간적 일관성 기반 하반신 스왑 필터] ---
+            // --- 시간적 일관성 및 공간 기반 하반신 스왑 필터 ---
             const previous = prevLandmarks.value;
 
             const kneeLVis = lms[25 * 5 + 3];
@@ -73,7 +73,7 @@ export function usePoseFrameProcessor() {
             const ankleLVis = lms[27 * 5 + 3];
             const ankleRVis = lms[28 * 5 + 3];
 
-            // 1. 두 다리가 모두 명확히 감지되는 상황(모두 가시성 >= 0.35)에서만 스왑 여부를 새로 연산 및 결정
+            // 1. 두 다리가 모두 명확히 감지되는 상황(모두 가시성 >= 0.35)에서만 스왑 판단 수행
             if (
               previous &&
               kneeLVis >= 0.35 &&
@@ -81,50 +81,75 @@ export function usePoseFrameProcessor() {
               ankleLVis >= 0.35 &&
               ankleRVis >= 0.35
             ) {
-              const prevKneeLx = previous[25].x;
-              const prevKneeLy = previous[25].y;
-              const prevKneeRx = previous[26].x;
-              const prevKneeRy = previous[26].y;
+              const rawKneeLx = lms[25 * 5];
+              const rawKneeRx = lms[26 * 5];
 
-              const prevAnkleLx = previous[27].x;
-              const prevAnkleLy = previous[27].y;
-              const prevAnkleRx = previous[28].x;
-              const prevAnkleRy = previous[28].y;
+              // A. 절대 공간 정규화 필터 (Spatial Override)
+              // 양 무릎의 X축 간격이 2D상에서 0.08 이상 벌어졌을 때는 다리가 겹치지 않는 정면 상태로 판정
+              if (Math.abs(rawKneeLx - rawKneeRx) > 0.08) {
+                // 전면 미러링 좌표계상 오른무릎(26)이 항상 왼무릎(25)보다 왼쪽에 위치해야 함 (x좌표가 더 작아야 정상)
+                if (rawKneeRx > rawKneeLx) {
+                  isLegSwapped.value = true; // 좌우가 반대로 출력됨 -> 스왑 필요
+                } else {
+                  isLegSwapped.value = false; // 정상 정렬 상태 -> 스왑 불필요
+                }
+              } else {
+                // B. 시간적 피드백 토글 필터 (Temporal Feedback Toggle)
+                // 양 다리가 겹치거나 뒤섞이는 상태일 때, 이전 프레임(previous)의 정상 궤적 연속성을 통해 스왑 상태 토글 여부 결정
+                const prevKneeLx = previous[25].x;
+                const prevKneeLy = previous[25].y;
+                const prevKneeRx = previous[26].x;
+                const prevKneeRy = previous[26].y;
 
-              const currKneeLx = lms[25 * 5];
-              const currKneeLy = lms[25 * 5 + 1];
-              const currKneeRx = lms[26 * 5];
-              const currKneeRy = lms[26 * 5 + 1];
+                const prevAnkleLx = previous[27].x;
+                const prevAnkleLy = previous[27].y;
+                const prevAnkleRx = previous[28].x;
+                const prevAnkleRy = previous[28].y;
 
-              const currAnkleLx = lms[27 * 5];
-              const currAnkleLy = lms[27 * 5 + 1];
-              const currAnkleRx = lms[28 * 5];
-              const currAnkleRy = lms[28 * 5 + 1];
+                // 현재 스왑 결정을 적용했을 때의 무릎/발목 좌표 후보군 계산
+                const currKneeLx = isLegSwapped.value ? lms[26 * 5] : lms[25 * 5];
+                const currKneeLy = isLegSwapped.value ? lms[26 * 5 + 1] : lms[25 * 5 + 1];
+                const currKneeRx = isLegSwapped.value ? lms[25 * 5] : lms[26 * 5];
+                const currKneeRy = isLegSwapped.value ? lms[25 * 5 + 1] : lms[26 * 5 + 1];
 
-              // 정상 매칭의 2D 이동 거리 합
-              const distNormal =
-                Math.hypot(currKneeLx - prevKneeLx, currKneeLy - prevKneeLy) +
-                Math.hypot(currKneeRx - prevKneeRx, currKneeRy - prevKneeRy) +
-                Math.hypot(currAnkleLx - prevAnkleLx, currAnkleLy - prevAnkleLy) +
-                Math.hypot(currAnkleRx - prevAnkleRx, currAnkleRy - prevAnkleRy);
+                const currAnkleLx = isLegSwapped.value ? lms[28 * 5] : lms[27 * 5];
+                const currAnkleLy = isLegSwapped.value ? lms[28 * 5 + 1] : lms[27 * 5 + 1];
+                const currAnkleRx = isLegSwapped.value ? lms[27 * 5] : lms[28 * 5];
+                const currAnkleRy = isLegSwapped.value ? lms[27 * 5 + 1] : lms[28 * 5 + 1];
 
-              // 스왑 매칭의 2D 이동 거리 합
-              const distSwap =
-                Math.hypot(currKneeRx - prevKneeLx, currKneeRy - prevKneeLy) +
-                Math.hypot(currKneeLx - prevKneeRx, currKneeLy - prevKneeRy) +
-                Math.hypot(currAnkleRx - prevAnkleLx, currAnkleRy - prevAnkleLy) +
-                Math.hypot(currAnkleLx - prevAnkleRx, currAnkleLy - prevAnkleRy);
+                // 현재 스왑 결정을 반대로 뒤집었을 때의 좌표 후보군 계산
+                const oppKneeLx = isLegSwapped.value ? lms[25 * 5] : lms[26 * 5];
+                const oppKneeLy = isLegSwapped.value ? lms[25 * 5 + 1] : lms[26 * 5 + 1];
+                const oppKneeRx = isLegSwapped.value ? lms[26 * 5] : lms[25 * 5];
+                const oppKneeRy = isLegSwapped.value ? lms[26 * 5 + 1] : lms[25 * 5 + 1];
 
-              // 스왑했을 때의 움직임 궤적이 훨씬 자연스럽고(0.08 이상 더 짧을 때) 일치할 경우 스왑 상태로 판정
-              if (distSwap < distNormal - 0.08) {
-                isLegSwapped.value = true;
-              } else if (distNormal < distSwap - 0.08) {
-                isLegSwapped.value = false;
+                const oppAnkleLx = isLegSwapped.value ? lms[27 * 5] : lms[28 * 5];
+                const oppAnkleLy = isLegSwapped.value ? lms[27 * 5 + 1] : lms[28 * 5 + 1];
+                const oppAnkleRx = isLegSwapped.value ? lms[28 * 5] : lms[27 * 5];
+                const oppAnkleRy = isLegSwapped.value ? lms[28 * 5 + 1] : lms[27 * 5 + 1];
+
+                // 현재 상태 기준 이전 랜드마크로부터의 2D 이동 거리 합
+                const distNormal =
+                  Math.hypot(currKneeLx - prevKneeLx, currKneeLy - prevKneeLy) +
+                  Math.hypot(currKneeRx - prevKneeRx, currKneeRy - prevKneeRy) +
+                  Math.hypot(currAnkleLx - prevAnkleLx, currAnkleLy - prevAnkleLy) +
+                  Math.hypot(currAnkleRx - prevAnkleRx, currAnkleRy - prevAnkleRy);
+
+                // 결정을 토글했을 때 이전 랜드마크로부터의 2D 이동 거리 합
+                const distOpposite =
+                  Math.hypot(oppKneeLx - prevKneeLx, oppKneeLy - prevKneeLy) +
+                  Math.hypot(oppKneeRx - prevKneeRx, oppKneeRy - prevKneeRy) +
+                  Math.hypot(oppAnkleLx - prevAnkleLx, oppAnkleLy - prevAnkleLy) +
+                  Math.hypot(oppAnkleRx - prevAnkleRx, oppAnkleRy - prevAnkleRy);
+
+                // 스왑 결정을 뒤바꾸는 것이 궤적 흐름상 훨씬 가깝고 부드러울 때(0.08 이상 더 짧을 때) 상태 토글
+                if (distOpposite < distNormal - 0.08) {
+                  isLegSwapped.value = !isLegSwapped.value;
+                }
               }
-              // 그 외 발 가려짐, 이탈 등의 애매한 구간에서는 기존 스왑 잠금 상태(isLegSwapped.value)를 그대로 유지하여 오작동 차단
             }
 
-            // 2. 결정된 스왑 상태에 따라 하반신 관절(골반 [23, 24]은 몸통 뒤틀림 방지를 위해 영구 제외)을 교체
+            // 2. 최종 결정된 스왑 상태에 따라 하반신 관절(골반 제외, 무릎~발가락만) 교체 수행
             if (isLegSwapped.value) {
               const LEG_PAIRS = [
                 [25, 26],
