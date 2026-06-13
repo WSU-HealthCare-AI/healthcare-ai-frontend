@@ -212,14 +212,8 @@ export function useRecommendationPlan(userId?: string) {
     setError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("AUTH_EXPIRED");
-
       const { error: invokeError } = await supabase.functions.invoke(
-        "sync-ai-plan",
-        {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        },
+        "sync-ai-plan"
       );
 
       if (invokeError) throw invokeError;

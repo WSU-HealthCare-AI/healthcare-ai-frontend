@@ -50,7 +50,7 @@ export function WorkoutPlanWidget({
           <View className="mt-2 flex-row flex-wrap gap-2">
             {todayRoutine.exercises.slice(0, 4).map((ex: Exercise, idx: number) => (
               <View key={`tag-${idx}`} className="rounded-full bg-white/20 px-3 py-1.5">
-                <Text className="text-xs font-medium text-white">{ex.name}</Text>
+                <Text className="text-xs font-medium text-white">{ex.name_ko || ex.name}</Text>
               </View>
             ))}
             {todayRoutine.exercises.length > 4 && (
