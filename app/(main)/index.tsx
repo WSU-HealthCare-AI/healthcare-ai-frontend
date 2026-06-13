@@ -25,7 +25,7 @@ export default function DashboardScreen() {
     }
   }, [userLoading, userId, status, plan, retry]);
 
-  // UI 렌더링 분기
+  // UI 초기 로딩 분기
   const isInitialLoading = !plan && (status === 'idle' || status === 'syncing' || userLoading);
 
   return (
@@ -60,7 +60,7 @@ export default function DashboardScreen() {
           <View className="mt-6 items-center justify-center rounded-3xl border border-blue-100 bg-blue-50 py-12">
             <ActivityIndicator size="large" color="#2563EB" className="mb-4" />
             <Text className="font-bold text-blue-900">AI 코치가 맞춤 플랜을 생성 중입니다</Text>
-            <Text className="mt-2 text-sm text-blue-600">약 20~30초 정도 소요됩니다</Text>
+            <Text className="mt-2 text-sm text-blue-600">약 1분 정도 소요됩니다</Text>
           </View>
         )}
 
@@ -78,11 +78,24 @@ export default function DashboardScreen() {
           <View className="pb-12">
             {plan.summary && <AISummaryWidget summary={plan.summary} />}
 
-            {/* 위젯들에 공통으로 계산된 currentDay Props 주입 */}
+            {/* [💡 인터랙션 최적화 적용] */}
+            {/* 오늘이 휴식일일 경우 '주간 플랜 확인하기' 터치 시 자동으로 주간 루틴 모달이 뜨도록 showWeekly 파라미터를 넘겨줍니다. */}
             <WorkoutPlanWidget
               workoutPlan={plan.workout_plan}
               currentDay={currentDay}
-              onStartWorkout={() => router.push('/workout')}
+              onStartWorkout={() => {
+                const todayRoutine = plan.workout_plan.weekly_routine.find(
+                  (day) => day.day === currentDay
+                );
+                if (todayRoutine?.is_rest_day) {
+                  router.push({
+                    pathname: '/workout',
+                    params: { showWeekly: 'true' },
+                  });
+                } else {
+                  router.push('/workout');
+                }
+              }}
             />
 
             <DietGuideWidget

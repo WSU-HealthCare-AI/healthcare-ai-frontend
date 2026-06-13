@@ -44,7 +44,7 @@ export function WorkoutChecklist({
               <View className="ml-3 flex-1">
                 <Text
                   className={`text-sm font-semibold ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                  {exercise.name} ({exercise.reps} x {exercise.sets}세트)
+                  {exercise.name_ko || exercise.name} ({exercise.reps} x {exercise.sets}세트)
                 </Text>
                 <Text className="mt-0.5 text-xs text-gray-500">{exercise.reason}</Text>
               </View>

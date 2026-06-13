@@ -2,8 +2,12 @@
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
   },
+  "deno.path": "C:\\Users\\sstou\\.deno\\bin\\deno.exe",
+  "deno.enable": true,
   "deno.enablePaths": [
-    "supabase/functions"
+    "supabase/functions",
+    "c:/dev/healthcare-ai-frontend/supabase/functions",
+    "c:\\dev\\healthcare-ai-frontend\\supabase\\functions"
   ],
   "deno.lint": true,
   "deno.unstable": [

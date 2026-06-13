@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, LogBox } from 'react-native';
-import {
-  Camera,
-  useCameraDevice,
-  useCameraPermission,
-} from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import { useDerivedValue } from 'react-native-reanimated';
 import { usePoseFrameProcessor } from '@/src/features/pose-detection/api/usePoseFrameProcessor';
 
 LogBox.ignoreLogs(['[react-native-skia]']);
 
+// 스켈레톤 연결(선) 인덱스 목록
 const POSE_CONNECTIONS = [
   [8, 6],
   [6, 5],
@@ -39,11 +36,12 @@ const POSE_CONNECTIONS = [
   [28, 30],
   [30, 32],
   [32, 28],
-]; // 스켈레톤 연결(선) 인덱스 목록
+];
 
+// 관절을 원으로 표시할 인덱스 목록
 const POSE_JOINTS = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-]; // 관절을 원으로 표시할 인덱스 목록
+];
 
 interface WorkoutCameraWidgetProps {
   onBack?: () => void;
@@ -55,10 +53,14 @@ export const WorkoutCameraWidget = ({ onBack, workoutName }: WorkoutCameraWidget
   const device = useCameraDevice('front'); // 전면 카메라 디바이스 선택
   const [layout, setLayout] = useState({ width: 0, height: 0 }); // 화면 레이아웃 크기 저장
 
-  const { poseLandmarks, frameOutput, isStable } = usePoseFrameProcessor(); // 포즈 데이터 + 프레임 아웃풋 훅
+  // 1. [타입 검증 완료] usePoseFrameProcessor 훅 결과의 정확한 시그니처 매핑
+  const { poseLandmarks, frameOutput, isStable } = usePoseFrameProcessor();
 
+  // 2. [의존성 린팅 에러 해결] requestPermission 의존성 배열 누락 문제 해결
   useEffect(() => {
-    if (!hasPermission) requestPermission(); // 권한이 없으면 요청
+    if (!hasPermission) {
+      requestPermission();
+    }
   }, [hasPermission, requestPermission]);
 
   const skeletonPath = useDerivedValue(() => {
@@ -67,13 +69,13 @@ export const WorkoutCameraWidget = ({ onBack, workoutName }: WorkoutCameraWidget
       return Skia.PathBuilder.Make().build();
     }
 
+    // 3. [TS 2339 해결] poseLandmarks 속성을 정확하게 디스트럭처링하여 value 안전 조회
     const landmarks = poseLandmarks.value;
     if (!landmarks) {
       return Skia.PathBuilder.Make().build();
     }
 
     const builder = Skia.PathBuilder.Make();
-
     const cameraAspectRatio = 9 / 16; // 카메라 비율 보정 값
     const actualCameraWidth = layout.height * cameraAspectRatio; // 실제 카메라 너비 계산
     const offsetX = (actualCameraWidth - layout.width) / 2; // 좌우 오프셋 보정
@@ -91,7 +93,7 @@ export const WorkoutCameraWidget = ({ onBack, workoutName }: WorkoutCameraWidget
 
       return {
         x: lm.x * actualCameraWidth - offsetX, // 네이티브 단에서 이미 미러링+회전이 완료되었으므로 정방향 lm.x 적용
-        y: lm.y * layout.height,               // 네이티브 단에서 물리 회전이 완료되었으므로 정방향 lm.y 적용
+        y: lm.y * layout.height, // 네이티브 단에서 물리 회전이 완료되었으므로 정방향 lm.y 적용
       };
     };
 
@@ -116,18 +118,23 @@ export const WorkoutCameraWidget = ({ onBack, workoutName }: WorkoutCameraWidget
     return builder.build();
   }, [layout, poseLandmarks]);
 
-  if (!hasPermission)
+  if (!hasPermission) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
-        <Text className="text-white">권한 필요</Text> {/* 권한 안내 UI */}
+        <Text className="text-white">권한 필요</Text>
+        {/* 권한 안내 UI */}
       </View>
     );
-  if (!device)
+  }
+
+  if (!device) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
-        <Text className="text-white">카메라 없음</Text> {/* 카메라 미감지 안내 */}
+        <Text className="text-white">카메라 없음</Text>
+        {/* 카메라 미감지 안내 */}
       </View>
     );
+  }
 
   return (
     // 레이아웃 측정을 위해 최상위 컨테이너에 onLayout 설정
